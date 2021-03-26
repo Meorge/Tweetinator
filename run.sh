@@ -1,4 +1,4 @@
 #!/bin/bash
-export FLASK_APP=flask_server.py
+export FLASK_APP="`dirname "$0"`/flask_server.py"
 # export FLASK_ENV=development
-flask run
+flask run --host=0.0.0.0

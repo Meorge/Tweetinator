@@ -14,11 +14,11 @@ import random
 import logging
 
 abspath = os.path.abspath(__file__)
-dname = os.path.join(os.getcwd(), "../bots")
+dname = os.path.join(os.path.dirname(abspath), "../bots")
 
 __default_date_string__ = "%d %b %Y %I:%M:%S %p"
 
-logging.basicConfig(filename="../output.log", level=logging.INFO, format='%(asctime)s --- %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
+logging.basicConfig(filename=os.path.join(os.path.dirname(abspath), "output.log"), level=logging.INFO, format='%(asctime)s --- %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
 
 class Bot:
     name = None
