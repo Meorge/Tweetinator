@@ -405,7 +405,8 @@ class Bot:
         return follower_count
 
     def check_queue(self):
-        self.get_last_follower_count()
+        # Disabling for now
+        # self.get_last_follower_count()
         if not os.path.exists(self.unposted_items_filename):
             logging.info(f"{self.name} - {self.unposted_items_filename} doesn't exist, so there are no posts to post")
             return
