@@ -32,6 +32,12 @@ body {
   }
 }
 
+@media (min-width: 767px) {
+  .navbar-toggler {
+    display: none;
+  }
+}
+
 .sidebar-sticky {
   position: relative;
   top: 0;

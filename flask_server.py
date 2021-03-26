@@ -117,6 +117,21 @@ def redistribute_tweets(bot_name):
 def batch_add_tweets(bot_name):
     return render_template("batch_add_tweets.html.j2", bot_name=bot_name, all_bot_data=bot_thread.get_all_bots_info())
 
+@app.route('/api/stats')
+def api_get_tweet_stats():
+    all_bot_data = bot_thread.get_all_bots_info()
+
+    json_list = []
+    for bot in all_bot_data:
+        json_list.append({
+            "name": bot[0],
+            "unposted": bot[1],
+            "posted": bot[2],
+            "archived": bot[3]
+        })
+    
+    return {"response": "success", "data": json_list}
+
 @app.route('/api/<bot_name>/tweets/<tweet_id>/set', methods=['POST'])
 def api_set_tweet(bot_name, tweet_id):
     print(request.content_type)
