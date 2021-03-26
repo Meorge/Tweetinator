@@ -1,0 +1,82 @@
+{% extends 'base.html.j2' %}
+{% set page_type = 'edit_tweet' %}
+{% block title %}{{ bot_name }} Edit Tweet{% endblock %}
+
+{% block extra_head %}
+<script type="text/javascript">
+    $(document).ready(function() {
+        $('#editTweetForm').submit(function() {
+            $.ajax({
+            url: "/api/{{ bot_name }}/tweets/{{ this_tweet.id }}/set",
+            data: JSON.stringify({
+                "text": document.getElementById("tweetText").value,
+                "dont_reschedule": document.getElementById("tweetPostDontReschedule").checked,
+                "post_at": document.getElementById("tweetPostTime").value,
+                "media": [
+                    document.getElementById("tweetMedia1").value,
+                    document.getElementById("tweetMedia2").value,
+                    document.getElementById("tweetMedia3").value,
+                    document.getElementById("tweetMedia4").value
+                ],
+                "reply_to": document.getElementById("tweetReplyId").value,
+                "id": document.getElementById("tweetId").value,
+            }),
+            success: function(response) {
+                console.log(response);
+                window.location.href = `/{{ bot_name }}/tweets/${response['tweet_id']}/edit`;
+            },
+            dataType: "json",
+            contentType: "application/json",
+            type: "post"
+            });
+            return false;
+        });
+    });
+</script>
+{% endblock %}
+
+{% block body %}
+    <h1 class="h2 w-100">Edit Tweet</h1>
+    <br>
+    <form id="editTweetForm">
+        <div class="mb-3">
+            <label for="tweetText" class="form-label">Text</label>
+            <textarea class="form-control" id="tweetText" rows="3" maxlength="280">{{ this_tweet.text }}</textarea>
+        </div>
+        <div class="mb-3">
+            <label for="tweetMedia1" class="form-label">Media paths</label>
+            <input type="text" class="form-control mb-3" id="tweetMedia1" value="{{ this_tweet.media[0] if 'media' in this_tweet and this_tweet.media|length >= 0 else '' }}">
+            <input type="text" class="form-control mb-3" id="tweetMedia2" value="{{ this_tweet.media[1] if 'media' in this_tweet and this_tweet.media|length >= 1 else '' }}">
+            <input type="text" class="form-control mb-3" id="tweetMedia3" value="{{ this_tweet.media[2] if 'media' in this_tweet and this_tweet.media|length >= 2 else '' }}">
+            <input type="text" class="form-control" id="tweetMedia4" value="{{ this_tweet.media[3] if 'media' in this_tweet and this_tweet.media|length >= 3 else '' }}">
+            <div id="tweetMediaHelp" class="form-text">
+                Enter the paths to the media to post. You can have one of the following:
+                <ul>
+                    <li>Up to 4 photos</li>
+                    <li>1 animated GIF</li>
+                    <li>1 video</li>
+                </ul>
+            </div>
+        </div>
+        <div class="mb-3">
+            <label for="tweetPostTime" class="form-label">Post Date and Time</label>
+            <div class="form-check">
+                <input type="checkbox" class="form-check-input" id="tweetPostDontReschedule" {{ "checked" if this_tweet.dont_reschedule else "" }}>
+                <label for="tweetPostDontReschedule" class="form-check-label">Don't reschedule this Tweet when redistributing the queue</label>
+            </div>
+            <input type="datetime-local" class="form-control" id="tweetPostTime" value="{{ this_tweet.post_at }}" step="any">
+            <div class="form-text">The date should be in ISO 8601 format: Y-m-dTH:M:S.fz</div>
+        </div>
+        <div class="mb-3">
+            <label for="tweetReplyId" class="form-label">Reply to Tweetinator ID</label>
+            <input type="text" class="form-control" id="tweetReplyId" value="{{ this_tweet.reply_to if 'reply_to' in this_tweet else '' }}">
+            <div id="tweetReplyIdHelp" class="form-text">Set this value to have this Tweet be posted as a reply to another one of this bot's Tweets.</div>
+        </div>
+        <div class="mb-3">
+            <label for="tweetId" class="form-label">Tweetinator ID</label>
+            <input type="text" class="form-control" id="tweetId" value="{{ this_tweet.id }}">
+            <div id="tweetIdHelp" class="form-text">In most cases, you shouldn't need to change this. If you do, make sure it isn't shared with any other Tweets.</div>
+        </div>
+        <button type="submit" class="btn btn-primary">Save</button>
+    </form>
+{% endblock %}

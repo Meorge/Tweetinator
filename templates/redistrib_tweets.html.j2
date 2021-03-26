@@ -1,0 +1,57 @@
+{% extends 'base.html.j2' %}
+{% set page_type = 'redistribute' %}
+{% block title %}{{ bot_name }} Redistribute Tweets{% endblock %}
+
+{% block extra_head %}
+<script type="text/javascript">
+    $(document).ready(function() {
+        let defaultDate = dayjs().add(1, 'day');
+        let defaultDateString = defaultDate.format("YYYY-MM-DDTHH:mm");
+        document.getElementById("tweetInitialPostTime").value = defaultDateString;
+
+        $('#redistribTweetForm').submit(function() {
+            $.ajax({
+            url: "/api/{{ bot_name }}/redistribute",
+            data: JSON.stringify({
+                "initialTime": document.getElementById("tweetInitialPostTime").value,
+                "interval": document.getElementById("tweetIntervalPostTime").value,
+                "shuffle": document.getElementById("shuffleTweets").checked
+            }),
+            success: function(response) {
+                console.log(response);
+                window.location.href = `/{{ bot_name }}/upcoming`;
+            },
+            dataType: "json",
+            contentType: "application/json",
+            type: "post"
+            });
+            return false;
+        });
+    });
+</script>
+{% endblock %}
+
+{% block body %}
+    <h1 class="h2 w-100">Redistribute Tweets for {{ bot_name }}</h1>
+    <br>
+    <form id="redistribTweetForm" class="w-100">
+        <div class="row my-3">
+            <div class="col-6">
+                <label for="tweetInitialPostTime" class="form-label">Schedule the first Tweet for:</label>
+                <input type="datetime-local" class="form-control" id="tweetInitialPostTime" value="" step="any" required>
+            </div>
+        </div>
+        <div class="row my-3">
+            <div class="col-6">
+                <label for="tweetIntervalPostTime" class="form-label">Number of minutes between each Tweet:</label>
+                <input type="number" class="form-control" id="tweetIntervalPostTime" value="30" step="any" min="0" required>
+            </div>
+        </div>
+        
+        <div class="form-check my-3">
+            <input type="checkbox" class="form-check-input" id="shuffleTweets">
+            <label for="shuffleTweets" class="form-check-label">Shuffle Tweets</label>
+        </div>
+        <button type="submit" class="btn btn-primary">Redistribute</button>
+    </form>
+{% endblock %}

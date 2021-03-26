@@ -1,0 +1,20 @@
+{% extends 'base.html.j2' %}
+{% set page_type = 'upcoming' %}
+{% block title %}{{ bot_name }} Queued Tweets{% endblock %}
+{% block body %}
+    
+    <h1 class="h2 w-100">Queued Tweets for {{ bot_name }}</h1>
+    <div class="container ps-0 ms-0">
+        <a onclick="newTweet('{{ bot_name }}')" class="btn btn-success">
+            <span class="bi bi-plus-circle">&nbsp;Add Tweet</span>
+        </a>
+        <a href="/{{ bot_name }}/batch_add" class="btn btn-success">
+            <span class="bi bi-folder-plus">&nbsp;Batch Import Tweets</span>
+        </a>
+        <a href="/{{ bot_name }}/redistribute" class="btn btn-warning">
+            <span class="bi bi-alarm">&nbsp;Reschedule Tweets</span>
+        </a>
+    </div>
+        <br>
+    {% include 'tweet_table.html.j2' with context %}
+{% endblock %}

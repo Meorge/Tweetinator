@@ -1,0 +1,8 @@
+{% extends 'base.html.j2' %}
+{% set page_type = 'archive' %}
+{% block title %}{{ bot_name }} Archived Tweets{% endblock %}
+{% block body %}
+    <h1 class="h2 w-100">Archived Tweets for {{ bot_name }}</h1>
+    </br>
+    {% include 'tweet_table.html.j2' with context %}
+{% endblock %}

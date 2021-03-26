@@ -1,0 +1,131 @@
+{% extends 'base.html.j2' %}
+{% set page_type = 'batch_add' %}
+{% block title %}{{ bot_name }} Batch Add Tweets{% endblock %}
+
+{% block extra_head %}
+<script src="{{ url_for('static', filename='scripts/batch_add.js') }}" type="text/javascript"></script>
+{% endblock %}
+
+{% block body %}
+    <meta id="bot_name" data-name="{{ bot_name }}">
+    <h1 class="h2 w-100">Batch Add Tweets for {{ bot_name }}</h1>
+    <ul class="nav nav-tabs w-100" id="myTab" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="simple-tab" data-bs-target="#batchSimple" type="button" role="tab" aria-controls="simple" aria-selected="true">
+                Simple
+                <div class="text-muted">Text only</div>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="advanced-tab" data-bs-target="#batchAdvanced" type="button" role="tab" aria-controls="advanced" aria-selected="false">
+                Advanced
+                <div class="text-muted">Text + Media, IDs</div>
+            </button>
+        </li>
+    </ul>
+
+    <!-- Confirmation modal -->
+    <div class="modal fade" id="batchSimpleConfirmModal" tabindex="-1" aria-labelledby="batchSimpleConfirmModalLabel" aria-modal="true" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="batchSimpleConfirmModalLabel">Tweets to be added to Queue</h5>
+                    <button id="batchSimpleCloseButton" type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="batchSimpleConfirmModalError" class="alert alert-danger" role="alert">
+                        <strong>Error</strong> - <span id="batchSimpleConfirmModalErrorMessage">something happened, apparently</span>
+                    </div>
+                    <div class="table responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Tweet</th>
+                                    <th scope="col">Date and Time</th>
+                                </tr>
+                            </thead>
+                            <tbody id="modalTweetTable">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button id="batchSimpleCancelButton" type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button id="batchSimpleConfirmButton" type="button" class="btn btn-primary">
+                        <span id="batchSimpleConfirmSpinner" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" style="display: none;"></span>
+                        <span id="batchSimpleConfirmButtonContent">Add to Queue</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="tab-content w-100" id="myTabContent">
+        <div class="tab-pane fade show active" id="batchSimple" role="tabpanel" aria-labelledby="simple-tab">
+            <div class="w-100">
+                <br>
+                Paste the batch of Tweets below.
+                <br>
+                <strong>Note - Media cannot be included with the Simple method. If you want to include media with your Tweets, use the Advanced method.</strong>
+                <form id="simpleBatchForm">
+                    <textarea class="form-control" id="simpleBatchTweetText" rows="10" oninput="updateBasicAddTweetButton(this.value)" required></textarea>
+
+                    <div class="row my-3">
+                        <div class="col-12">
+                        <label for="tweetSeparator" class="form-label">Separate Tweets by:</label>
+                        <input type="text" class="form-control" id="tweetSeparator" placeholder="New line" oninput="updateSeparator(this.value)">
+                        </div>
+                    </div>
+
+                    <div class="form-check my-3">
+                        <input type="checkbox" class="form-check-input" id="shuffleTweets">
+                        <label for="shuffleTweets" class="form-check-label">Shuffle these Tweets before adding to the queue</label>
+                    </div>
+
+                    <hr class="my-10" />
+
+                    <div class="row my-3">
+                        <div class="col-6">
+                            <label for="tweetInitialPostTime" class="form-label">Schedule the first Tweet for:</label>
+                            <input type="datetime-local" class="form-control" id="tweetInitialPostTime" value="" step="any" oninput="updateUpcomingDates()" required>
+                        </div>
+                        <div class="col-6">
+                            <label for="tweetIntervalPostTime" class="form-label">Number of minutes between each Tweet:</label>
+                            <input type="number" class="form-control" id="tweetIntervalPostTime" value="30" step="any" min="0" oninput="updateUpcomingDates()" required>
+                        </div>
+                    </div>
+
+                    <div class="row my-3">
+                        <div class="col-12">
+                            Tweet times:
+                            <ul id="upcomingTweetTimes"></ul>
+                            The last Tweet will be queued for <strong id="lastTweetTime"></strong>.
+                        </div>
+                    </div>
+                    <button id="batchSimplePreviewButton" type="submit" class="btn btn-primary">Preview Tweets for Queue</button>
+                    <div class="text-small text-muted">You'll be able to double-check the Tweets and their timing before they're added to the Queue.</div>
+                </form>
+            </div>
+        </div>
+        <div class="tab-pane fade" id="batchAdvanced" role="tabpanel" aria-labelledby="advanced-tab">
+            <div class="w-100">
+                <br>
+                Paste a JSON array of Tweets below. A single entry should contain the following attributes:
+                <ul>
+                    <li><code>text</code> (string) - the body text of the Tweet</li>
+                    <li><code>post_at</code> (ISO 8601 formatted string) - the time to post the Tweet at</li>
+                    <li><code>dont_reschedule</code> (boolean) - whether or not this specific Tweet should be rescheduled when this bot's Tweets are rescheduled</li>
+                    <li><code>media</code> (array of up to 4 strings) - paths to the media to post</li>
+                    <li><code>reply_to</code> (string) - a Tweetinator ID for a Tweet to reply to</li>
+                    <li><code>id</code> (string) - unique identifier for this Tweet</li>
+                </ul>
+                <code><textarea class="form-control" id="advancedBatchTweetText" rows="10"></textarea></code>
+
+                <div id="batchAdvancedError" class="alert alert-danger" role="alert">
+                    <strong>Error</strong> - <span id="batchAdvancedErrorMessage">something happened, apparently</span>
+                </div>
+
+                <a class="btn btn-primary my-3" onClick="parseAdvancedTweets()">Add Tweets</a>
+            </div>
+        </div>
+    </div>
+{% endblock %}
