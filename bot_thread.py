@@ -6,7 +6,7 @@ from typing import Dict, List
 from datetime import datetime
 
 class BotThread(Thread):
-    bots: dict[str, Bot] = {}
+    bots: Dict[str, Bot] = {}
     wait_duration: float = 10
     def __init__(self, wait_duration=10):
         super().__init__()

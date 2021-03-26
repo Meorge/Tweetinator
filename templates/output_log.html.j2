@@ -1,0 +1,54 @@
+{% extends 'base.html.j2' %}
+{% set page_type = 'output-log' %}
+{% block title %}Output Log{% endblock %}
+
+{% block extra_head %}
+<script type="text/javascript">
+    let logContent = "Log file not loaded"
+    let reversed = true
+
+    $(document).ready(function() {
+        $.ajax({
+            url: "/api/log",
+            data: JSON.stringify({
+                "reverse": false
+            }),
+            success: function(response) {
+                logContent = response
+                updateLogContent()
+            },
+            dataType: "text",
+            contentType: "application/json",
+            type: "get"
+            });
+    });
+
+    function updateLogContent() {
+        newContent = logContent
+        if (reversed) {
+            // reverse order
+            newContent = newContent.split('\n').reverse().join('\n')
+
+            document.getElementById("msgOrder").innerText = "newest"            
+        } else {
+            document.getElementById("msgOrder").innerText = "oldest"
+        }
+        document.getElementById("logContents").innerText = newContent
+    }
+</script>
+{% endblock %}
+
+{% block body %}
+    <h1 class="h2 w-100 mb-0">Output Log</h1>
+    <div class="w-100"><small>Currently displaying <span id="msgOrder"></span> messages first</small></div>
+    <div class="my-3 w-100">
+        <a onclick="reversed = !reversed; updateLogContent();" class="btn btn-primary">
+            <span class="bi bi-arrow-counterclockwise">&nbsp;Reverse Order</span>
+        </a>
+    </div>
+    <br>
+    <hr>
+    <div class="w-100">
+        <pre class="pre-scrollable"><code id="logContents">Loading log contents...</code></pre>
+    </div>
+{% endblock %}

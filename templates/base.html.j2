@@ -36,6 +36,14 @@
                                 Dashboard
                             </a>
                         </li>
+
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link {% if page_type == 'output-log' %}active{% endif %}" href="/log">
+                                <i class="bi bi-card-list"></i>
+                                Output Log
+                            </a>
+                        </li>
                     </ul>
                     {% for t_bot_name, num_unposted, num_posted, num_archived in all_bot_data %}
                         <hr/>

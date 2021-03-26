@@ -1,5 +1,7 @@
+#!/usr/bin/python3.7
 from logging import debug
 from os import wait
+import os.path
 from types import TracebackType
 from bot_thread import BotThread
 from flask import Flask, render_template, request
@@ -23,6 +25,9 @@ bot_thread.add_bot("example_bot")
 bot_thread.add_bot("gpt2upaguy")
 bot_thread.add_bot("gpt2writesjokes")
 bot_thread.add_bot("hd2dtitlegenerator")
+
+abspath = os.path.abspath(__file__)
+log_file = os.path.join(os.path.dirname(abspath), "output.log")
 
 if __name__ == "__main__":
     print("hoo")
@@ -92,6 +97,12 @@ def archive_tweets(bot_name):
         return render_template("archive.html.j2", bot_name=bot_name, tweets=tweets, all_bot_data=all_bot_data)
     else:
         return f"No bot is registered with name {bot_name}"
+
+
+@app.route('/log')
+def output_log():
+    all_bot_data = bot_thread.get_all_bots_info()
+    return render_template("output_log.html.j2", all_bot_data=all_bot_data)
 
 @app.route('/<bot_name>/tweets/<tweet_id>/edit')
 def edit_tweet(bot_name, tweet_id):
@@ -163,6 +174,29 @@ def api_redistribute_tweets(bot_name):
     print(data)
 
     return bot_thread.redistribute_tweets(bot_name, data)
+
+@app.route('/api/log')
+def api_output_log():
+
+    try:
+        reverse_log = request.args.get('reverse')
+    except:
+        reverse_log = False
+
+    log_content = "Could not load log content"
+    try:
+        with open(log_file, 'r') as f:
+            log_content = [line.strip() for line in f.readlines()]
+
+            if reverse_log:
+                log_content.reverse()
+
+            log_content = "\n".join(log_content)
+    except IOError as e:
+        log_content = f"{e}"
+
+    return log_content
+
 
 @app.route('/')
 def homepage():
