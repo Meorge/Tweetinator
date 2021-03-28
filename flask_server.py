@@ -46,7 +46,6 @@ def upcoming_tweets(bot_name):
 
     if bot_name in bot_thread.bots:
         tweets = bot_thread.get_upcoming_tweets(bot_name)
-        print(tweets)
         return render_template("upcoming.html.j2", bot_name=bot_name, tweets=tweets, all_bot_data=all_bot_data)
     else:
         return f"No bot is registered with name {bot_name}"

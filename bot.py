@@ -75,24 +75,7 @@ class Bot:
         # Now that the bot is ready to roll, let's make sure there are no tweets backed up
         # If there are, we'll send them to the archive
         try:
-            unposted = self.get_unposted_items()
-            now = datetime.now()
-            backed_up = []
-            for tweet in unposted:
-                if datetime.fromisoformat(tweet["post_at"]) < now:
-                    logging.info(f"{self.name} - tweet {tweet} was queued for before now, so sending it to the archive")
-                    tweet["archive_reason"] = "Queued prematurely"
-                    backed_up.append(tweet)
-
-            unposted_without_backed_up = [ tweet for tweet in unposted if tweet not in backed_up ]
-
-            self.write_unposted_items(unposted_without_backed_up)
-
-            archived = self.get_archive_items()
-            archived = self.sort_items(archived + backed_up, reverse=False)
-
-            self.write_archive_items(archived)
-
+            tweet_db.update_many({"bot_name": self.name, "post_at": {"$lt": datetime.utcnow()}}, {"$set": {"status": "archived", "archive_reason": "Queued prematurely"}})
         except Exception:
             logging.exception(f"{self.name} - Couldn't complete backlog cleaning")
 
@@ -118,55 +101,59 @@ class Bot:
         return tweet_db.find_one(id)
 
     def archive_item(self, id, ripple=False):
-        item_to_archive = self.get_item_from_id(id)
+        print("in archive_item")
+        archive_result = tweet_db.update_one({"_id": ObjectId(id)}, {"$set": {"status": "archived", "archive_reason": "Manual"}})
+        print(f"{archive_result.modified_count} modified")
+        print("done archiving")
+        # item_to_archive = self.get_item_from_id(id)
 
-        # remove item from unposted
-        items = self.get_unposted_items()
-        items.reverse()
+        # # remove item from unposted
+        # items = self.get_unposted_items()
+        # items.reverse()
 
-        if ripple:
-            # Get index of item_to_archive
-            index_to_archive = items.index(item_to_archive)
+        # if ripple:
+        #     # Get index of item_to_archive
+        #     index_to_archive = items.index(item_to_archive)
 
             
 
-            start_index = index_to_archive
+        #     start_index = index_to_archive
 
-            # print(f"Ripple time! going from {start_index} to {0}")
+        #     # print(f"Ripple time! going from {start_index} to {0}")
 
-            # For all subsequent items, move their dates down
-            for i in range(0, start_index):
-                # print(i)
-                # print(items[i])
-                # print(items[i+1])
+        #     # For all subsequent items, move their dates down
+        #     for i in range(0, start_index):
+        #         # print(i)
+        #         # print(items[i])
+        #         # print(items[i+1])
                 
                 
                 
-                # Skip an item if it's set to not reschedule
-                if items[i]["dont_reschedule"]: continue
+        #         # Skip an item if it's set to not reschedule
+        #         if items[i]["dont_reschedule"]: continue
 
-                # print(f"{i} - \"{items[i]['text']}\" {items[i]['post_at']} should now be posted at \"{items[i+1]['text']}\" {items[i+1]['post_at']} time")
-                # print("----")
+        #         # print(f"{i} - \"{items[i]['text']}\" {items[i]['post_at']} should now be posted at \"{items[i+1]['text']}\" {items[i+1]['post_at']} time")
+        #         # print("----")
 
-                # this item should take the post_at date of
-                # the item before it
-                items[i]["post_at"] = items[i+1]["post_at"]
-
-
-
-            # print("Done with ripple loop")
+        #         # this item should take the post_at date of
+        #         # the item before it
+        #         items[i]["post_at"] = items[i+1]["post_at"]
 
 
-        items = [ item for item in items if item["id"] != item_to_archive["id"]]
-        items.reverse()
-        self.write_unposted_items(items)
 
-        # print(f"Removing item {item_to_archive['text']} from queue")
+        #     # print("Done with ripple loop")
 
-        # add it to the archive
-        archive = self.get_archive_items()
-        archive.append(item_to_archive)
-        self.write_archive_items(archive)
+
+        # items = [ item for item in items if item["id"] != item_to_archive["id"]]
+        # items.reverse()
+        # self.write_unposted_items(items)
+
+        # # print(f"Removing item {item_to_archive['text']} from queue")
+
+        # # add it to the archive
+        # archive = self.get_archive_items()
+        # archive.append(item_to_archive)
+        # self.write_archive_items(archive)
 
     def unarchive_item(self, id):
         result = tweet_db.update_one({"_id": ObjectId(id)}, {"$set": {"status": "unposted"}})
@@ -255,9 +242,9 @@ class Bot:
             if twitter_id is None:
                 # it failed for some reason
                 # add it to the archive
-                tweet_db.update_one({"_id": ObjectId(item["_id"])}, {"status": "archived", "archive_reason": "Failed to post"})
+                tweet_db.update_one({"_id": ObjectId(item["_id"])}, {"$set": {"status": "archived", "archive_reason": "Failed to post"}})
             else:
-                tweet_db.update_one({"_id": ObjectId(item["_id"])}, {"status": "posted", "twitter_id": twitter_id})
+                tweet_db.update_one({"_id": ObjectId(item["_id"])}, {"$set": {"status": "posted", "twitter_id": twitter_id}})
 
     def tweet_item(self, item):
         # Authenticate
