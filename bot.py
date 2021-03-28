@@ -247,57 +247,17 @@ class Bot:
         return follower_count
 
     def check_queue(self):
-        # ok so we have the file
-        unposted_items = self.get_unposted_items()
-
-        # now we've got stuff to sort through
-        new_unposted = unposted_items.copy()
-
-
-        posted_this_time = []
+        unposted_items = tweet_db.find({"bot_name": self.name, "post_at": {"$lt": datetime.utcnow()}})
         for item in unposted_items:
-            # check the date on the item
-
-            if item["post_at"] == "": continue
+            logging.info(f"{self.name} - Time to tweet: {json.dumps(item)}")
+            twitter_id = self.tweet_item(item)
             
-            item_post_date = datetime.fromisoformat(item["post_at"])
-            if item_post_date < datetime.now():
-                logging.info(f"{self.name} - Time to tweet: {json.dumps(item)}")
-                updated_item = item.copy()
-                updated_item["twitter_id"] = self.tweet_item(item)
-                new_unposted.remove(item)
-                
-                if updated_item["twitter_id"] is None:
-                    # it failed for some reason
-                    # add it to the archive
-                    updated_item["archive_reason"] = "Failed to post"
-                    archive = self.get_archive_items()
-                    archive.append(updated_item)
-                    self.write_archive_items(archive)
-
-                    # remove it from the queue
-                    queue = self.get_unposted_items()
-                    queue.remove(item)
-                    self.write_unposted_items(queue)
-                else:
-                    posted_this_time.append(updated_item)
-
-        # if nothing was posted, we don't have to do anything
-        if len(posted_this_time) == 0: return
-        # print(f"New unposted: {new_unposted}")
-
-        # sort the unposted items
-        new_unposted = self.sort_items(new_unposted)
-
-        # update the unposted items file
-        self.write_unposted_items(new_unposted)
-
-        # update the posted items file
-
-        posted_before = self.get_posted_items()
-        posted_all = sorted(posted_before + posted_this_time, key = self.sort_by_date)
-
-        self.write_posted_items(posted_all)
+            if twitter_id is None:
+                # it failed for some reason
+                # add it to the archive
+                tweet_db.update_one({"_id": ObjectId(item["_id"])}, {"status": "archived", "archive_reason": "Failed to post"})
+            else:
+                tweet_db.update_one({"_id": ObjectId(item["_id"])}, {"status": "posted", "twitter_id": twitter_id})
 
     def tweet_item(self, item):
         # Authenticate

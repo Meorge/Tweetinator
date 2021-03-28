@@ -7,7 +7,7 @@
     $(document).ready(function() {
         $('#editTweetForm').submit(function() {
             $.ajax({
-            url: "/api/{{ bot_name }}/tweets/{{ this_tweet.id }}/set",
+            url: "/api/{{ bot_name }}/tweets/{{ this_tweet._id }}/set",
             data: JSON.stringify({
                 "text": document.getElementById("tweetText").value,
                 "dont_reschedule": document.getElementById("tweetPostDontReschedule").checked,
@@ -74,8 +74,7 @@
         </div>
         <div class="mb-3">
             <label for="tweetId" class="form-label">Tweetinator ID</label>
-            <input type="text" class="form-control" id="tweetId" value="{{ this_tweet.id }}">
-            <div id="tweetIdHelp" class="form-text">In most cases, you shouldn't need to change this. If you do, make sure it isn't shared with any other Tweets.</div>
+            <input type="text" readonly class="form-control" id="tweetId" value="{{ this_tweet._id }}">
         </div>
         <button type="submit" class="btn btn-primary">Save</button>
     </form>
