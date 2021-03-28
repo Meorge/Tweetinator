@@ -13,19 +13,23 @@ from traceback import print_tb
 # export FLASK_APP=flask_server.py
 # before running
 
+
+
 app = Flask(__name__)
 
 app.jinja_env.auto_reload = True
 
 bot_thread = BotThread(wait_duration=60)
 bot_thread.daemon = True
+
+
+with open('../bots.json', 'r') as f:
+    loaded_bots = json.load(f)
+
+    for i in loaded_bots:
+        bot_thread.add_bot(i)
+
 bot_thread.start()
-
-
-bot_thread.add_bot("gpt2upaguy")
-bot_thread.add_bot("hd2dtitlegenerator")
-# bot_thread.add_bot("gpt2writesjokes")
-# bot_thread.add_bot("example_bot")
 
 abspath = os.path.abspath(__file__)
 log_file = os.path.join(os.path.dirname(abspath), "output.log")
