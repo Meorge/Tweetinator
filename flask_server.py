@@ -22,7 +22,6 @@ app.jinja_env.auto_reload = True
 bot_thread = BotThread(wait_duration=60)
 bot_thread.daemon = True
 
-
 with open(os.path.join(Path(__file__).parents[1], 'bots.json'), 'r') as f:
     loaded_bots = json.load(f)
 
