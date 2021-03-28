@@ -10,10 +10,17 @@ import os.path
 from datetime import date, datetime, timedelta
 import shortuuid
 import random
+from pymongo import MongoClient
 
 import logging
 
 from pathlib import Path
+
+# Log into database
+database_client = MongoClient()
+tweet_db = database_client.tweetinator.tweets
+
+
 
 abspath = os.path.abspath(__file__)
 dname = os.path.abspath(os.path.join(os.path.dirname(abspath), "/bots"))
@@ -87,25 +94,6 @@ class Bot:
         except Exception:
             logging.exception(f"{self.name} - Couldn't complete backlog cleaning")
 
-    def no_access_info(self, config, access_json_filename):
-        auth = self.get_auth()
-        if "verifier" not in config:
-            print(f"Access token data not found. Please go to this link and authenticate: {auth.get_authorization_url()}")
-            print(f"Once verified, paste the code below.")
-            verifier = input("> ")
-
-            try:
-                self.access_key, self.access_secret = auth.get_access_token(verifier)
-            except tweepy.TweepError as e:
-                raise Exception(f"Failed to get access token: {e}")
-            
-            access_json = {"access_key": self.access_key, "access_secret": self.access_secret}
-
-            # Write stuff to access_keys.json
-            access_json_file = open(access_json_filename, "w")
-            json.dump(access_json, access_json_file, indent=4)
-            access_json_file.close()
-
     def get_auth(self):
         return tweepy.OAuthHandler(self.consumer_key, self.consumer_secret)
 
@@ -115,18 +103,6 @@ class Bot:
         return tweepy.API(auth)
 
     @property
-    def unposted_items_filename(self):
-        return os.path.join(dname, f"{self.name}/posts.json")
-
-    @property
-    def posted_items_filename(self):
-        return os.path.join(dname, f"{self.name}/completed.json")
-
-    @property
-    def archive_items_filename(self):
-        return os.path.join(dname, f"{self.name}/archive.json")
-
-    @property
     def follower_counts_filename(self):
         return os.path.join(dname, f"{self.name}/followers.csv")
 
@@ -134,85 +110,8 @@ class Bot:
     def media_foldername(self):
         return os.path.join(dname, f"{self.name}/media")
 
-    @property
-    def sort_by_date(self):
-        return lambda i: datetime.fromisoformat(i["post_at"])
-
-    def load_json(self, filename):
-        items = []
-        try:
-            if os.path.exists(filename):
-                f = open(filename, "r")
-                try:
-                    items = json.load(f)
-                except json.decoder.JSONDecodeError:
-                    logging.exception(f"{self.name} - Error decoding JSON from {filename}")
-                finally:
-                    f.close()
-        except IOError:
-            logging.exception(f"{self.name} - Error reading {filename}")
-        return items
-
-    def write_json(self, filename, items):
-        try:
-            with open(filename, "w") as f:
-                json.dump(items, f, indent=4)
-        except IOError:
-            logging.exception(f"{self.name} - Error writing writing to {filename}")
-        except json.decoder.JSONDecodeError:
-            logging.exception(f"{self.name} - Error writing JSON to {filename}")
-
-    def get_unposted_items(self):
-        return self.load_json(self.unposted_items_filename)
-
-    def write_unposted_items(self, items):
-        self.write_json(self.unposted_items_filename, items)
-
-    def get_posted_items(self):
-        return self.load_json(self.posted_items_filename)
-
-    def write_posted_items(self, items):
-        self.write_json(self.posted_items_filename, items)
-
-    def get_archive_items(self):
-        return self.load_json(self.archive_items_filename)
-
-    def write_archive_items(self, items):
-        self.write_json(self.archive_items_filename, items)
-
-    def sort_items(self, items, reverse=False):
-        return sorted(items, key = self.sort_by_date, reverse=reverse)
-
     def get_item_from_id(self, id):
-        # see if item is unposted
-        result = self.get_unposted_item_from_id(id)
-        if result != None: return result
-        
-        # not in unposted items, so check posted items
-        result = self.get_posted_item_from_id(id)
-        if result != None: return result
-        
-        # not in posted items, so check archive
-        return self.get_archived_item_from_id(id)
-
-    def get_unposted_item_from_id(self, id):
-        items = self.get_unposted_items()
-        for i in items:
-            if i["id"] == id: return i
-        return None
-
-    def get_posted_item_from_id(self, id):
-        items = self.get_posted_items()
-        for i in items:
-            if i["id"] == id: return i
-        return None
-
-    def get_archived_item_from_id(self, id):
-        items = self.get_archive_items()
-        for i in items:
-            if i["id"] == id: return i
-
-        return None
+        return tweet_db.find_one(id)
 
     def archive_item(self, id, ripple=False):
         item_to_archive = self.get_item_from_id(id)
@@ -347,12 +246,12 @@ class Bot:
         if "id" not in tweet: tweet["id"] = shortuuid.uuid()
         if "reply_to" not in tweet: tweet["reply_to"] = ""
 
-        # add this new tweet to unposted
-        unposted = self.get_unposted_items()
-        unposted.append(tweet)
-        self.sort_items(unposted)
-        self.write_unposted_items(unposted)
-        return tweet["id"]
+        # the mongoDB way
+        tweet["bot_name"] = self.name
+        tweet["status"] = "unposted"
+        tweet["archive_reason"] = None
+
+        return str(tweet_db.insert_one(tweet).inserted_id)
 
     def get_updated_tweet(self, old_tweet, new_tweet):
         if new_tweet["text"] is not None: old_tweet["text"] = new_tweet["text"]
@@ -362,12 +261,6 @@ class Bot:
         if new_tweet["id"] is not None: old_tweet["id"] = new_tweet["id"]
         if new_tweet["reply_to"] is not None: old_tweet["reply_to"] = new_tweet["reply_to"]
         return old_tweet
-
-    def sort_queue(self):
-        unposted_items = self.sort_items(self.get_unposted_items())
-        self.write_unposted_items(unposted_items)
-        posted_items = self.sort_items(self.get_posted_items())
-        self.write_posted_items(posted_items)
 
     def write_follower_counts(self, data):
         with open(self.follower_counts_filename, "w") as f:
@@ -409,12 +302,6 @@ class Bot:
         return follower_count
 
     def check_queue(self):
-        # Disabling for now
-        # self.get_last_follower_count()
-        if not os.path.exists(self.unposted_items_filename):
-            logging.info(f"{self.name} - {self.unposted_items_filename} doesn't exist, so there are no posts to post")
-            return
-
         # ok so we have the file
         unposted_items = self.get_unposted_items()
 
@@ -510,35 +397,26 @@ class Bot:
             logging.exception(f"{self.name} - Error when trying to post Tweet")
             return None
 
-    def get_first_n_items(self, items, n, time_format):
-        output_items = []
-        for item in items[:min(n, len(items))]:
-            date_obj = datetime.fromisoformat(item["post_at"])
+    def get_upcoming_tweets(self, n=0):
+        tweets = list(tweet_db.find({"bot_name": self.name, "status": "unposted"}).limit(n))
+        return tweets
 
-            date_string = datetime.strftime(date_obj, time_format)
-            output_items.append((item["text"], item["id"], date_string, item["twitter_id"] if "twitter_id" in item else None))
-        return output_items
+    def get_recent_tweets(self, n=0):
+        tweets = list(tweet_db.find({"bot_name": self.name, "status": "posted"}).limit(n))
+        return tweets
 
-    def get_upcoming_tweets(self, n=10, time_format=__default_date_string__):
-        items = self.sort_items(self.get_unposted_items())
-        return self.get_first_n_items(items, n, time_format)
-
-    def get_recent_tweets(self, n=10, time_format=__default_date_string__):
-        items = self.sort_items(self.get_posted_items(), reverse=True)
-        return self.get_first_n_items(items, n, time_format)
-
-    def get_archive_tweets(self, n=10, time_format=__default_date_string__):
-        items = self.sort_items(self.get_archive_items(), reverse=True)
-        return self.get_first_n_items(items, n, time_format)
+    def get_archive_tweets(self, n=0):
+        tweets = list(tweet_db.find({"bot_name": self.name, "status": "archived"}).limit(n))
+        return tweets
 
     def get_number_of_unposted_items(self):
-        return len(self.get_unposted_items())
+        return tweet_db.count_documents({"bot_name": self.name, "status": "unposted"})
 
     def get_number_of_posted_items(self):
-        return len(self.get_posted_items())
+        return tweet_db.count_documents({"bot_name": self.name, "status": "posted"})
 
     def get_number_of_archived_items(self):
-        return len(self.get_archive_items())
+        return tweet_db.count_documents({"bot_name": self.name, "status": "archived"})
 
     def get_number_of_all_items(self):
         return (self.get_number_of_unposted_items(), self.get_number_of_posted_items(), self.get_number_of_archived_items())

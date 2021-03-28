@@ -28,7 +28,7 @@ with open(os.path.join(Path(__file__).parents[1], 'bots.json'), 'r') as f:
     for i in loaded_bots:
         bot_thread.add_bot(i)
 
-bot_thread.start()
+# bot_thread.start()
 
 abspath = os.path.abspath(__file__)
 log_file = os.path.join(os.path.dirname(abspath), "output.log")
@@ -45,8 +45,8 @@ def upcoming_tweets(bot_name):
     all_bot_data = bot_thread.get_all_bots_info()
 
     if bot_name in bot_thread.bots:
-        tweets = bot_thread.get_upcoming_tweets(bot_name, n=9999, time_format="%B %d, %Y at %I:%M:%S %p")
-        number_of_items = bot_thread.get_number_of_all_items(bot_name)
+        tweets = bot_thread.get_upcoming_tweets(bot_name)
+        print(tweets)
         return render_template("upcoming.html.j2", bot_name=bot_name, tweets=tweets, all_bot_data=all_bot_data)
     else:
         return f"No bot is registered with name {bot_name}"
@@ -89,8 +89,7 @@ def delete_tweet(bot_name, tweet_id):
 def recent_tweets(bot_name):
     all_bot_data = bot_thread.get_all_bots_info()
     if bot_name in bot_thread.bots:
-        tweets = bot_thread.get_recent_tweets(bot_name, n=9999, time_format="%B %d, %Y at %I:%M:%S %p")
-        number_of_items = bot_thread.get_number_of_all_items(bot_name)
+        tweets = bot_thread.get_recent_tweets(bot_name)
         return render_template("posted.html.j2", bot_name=bot_name, tweets=tweets, all_bot_data=all_bot_data)
     else:
         return f"No bot is registered with name {bot_name}"
@@ -99,12 +98,10 @@ def recent_tweets(bot_name):
 def archive_tweets(bot_name):
     all_bot_data = bot_thread.get_all_bots_info()
     if bot_name in bot_thread.bots:
-        tweets = bot_thread.get_archive_tweets(bot_name, n=9999, time_format="%B %d, %Y at %I:%M:%S %p")
-        number_of_items = bot_thread.get_number_of_all_items(bot_name)
+        tweets = bot_thread.get_archive_tweets(bot_name, n=9999)
         return render_template("archive.html.j2", bot_name=bot_name, tweets=tweets, all_bot_data=all_bot_data)
     else:
         return f"No bot is registered with name {bot_name}"
-
 
 @app.route('/log')
 def output_log():

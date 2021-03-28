@@ -39,14 +39,14 @@ class BotThread(Thread):
     def get_number_of_all_items(self, bot_name):
         return self.bots[bot_name].get_number_of_all_items()
 
-    def get_upcoming_tweets(self, bot_name, n=10, time_format="%d %b %Y %I:%M:%S %p"):
-        return self.bots[bot_name].get_upcoming_tweets(n, time_format)
+    def get_upcoming_tweets(self, bot_name, n=0):
+        return self.bots[bot_name].get_upcoming_tweets(n)
 
-    def get_recent_tweets(self, bot_name, n=10, time_format="%d %b %Y %I:%M:%S %p"):
-        return self.bots[bot_name].get_recent_tweets(n, time_format)
+    def get_recent_tweets(self, bot_name, n=0):
+        return self.bots[bot_name].get_recent_tweets(n)
 
-    def get_archive_tweets(self, bot_name, n=10, time_format="%d %b %Y %I:%M:%S %p"):
-        return self.bots[bot_name].get_archive_tweets(n, time_format)
+    def get_archive_tweets(self, bot_name, n=0):
+        return self.bots[bot_name].get_archive_tweets(n)
 
     def set_tweet(self, bot_name, tweet_id, tweet_data):
         return self.bots[bot_name].set_tweet(tweet_id, tweet_data)
@@ -71,5 +71,6 @@ class BotThread(Thread):
     def run(self):
         while True:
             for bot_name, bot in self.bots.items():
-                bot.check_queue()
+                # bot.check_queue()
+                pass
             sleep(self.wait_duration)

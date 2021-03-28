@@ -12,33 +12,33 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for tweet_text, internal_id, tweet_time, tweet_id in tweets %}
+                    {% for tweet in tweets %}
                     <tr>
-                        <td style="width: 50%; word-wrap: break-word;">{{ tweet_text.replace("\n", "<br>") }}</td>
-                        <td>{{ tweet_time }}</td>
+                        <td style="width: 50%; word-wrap: break-word;">{{ tweet["text"].replace("\n", "<br>") }}</td>
+                        <td>{{ tweet["post_at"] }}</td>
                         <td>
                             {% if page_type != 'posted' %}
-                                <a class="btn btn-sm btn-primary" href="/{{ bot_name }}/tweets/{{ internal_id }}/edit">
+                                <a class="btn btn-sm btn-primary" href="/{{ bot_name }}/tweets/{{ tweet['_id'] }}/edit">
                                     <span class="bi bi-pencil-fill">&nbsp;Edit</span>
                                 </a>
                             {% endif %}
                             
                             {% if page_type == 'upcoming' %}
-                                <a class="btn btn-sm btn-danger" onclick="archiveTweet('{{ bot_name }}', '{{ internal_id }}', true)">
+                                <a class="btn btn-sm btn-danger" onclick="archiveTweet('{{ bot_name }}', '{{ tweet['_id'] }}', true)">
                                     <span class="bi bi-archive-fill">&nbsp;Ripple Archive</span>
                                 </a>
-                                <a class="btn btn-sm btn-danger" onclick="archiveTweet('{{ bot_name }}', '{{ internal_id }}', false)">
+                                <a class="btn btn-sm btn-danger" onclick="archiveTweet('{{ bot_name }}', '{{ tweet['_id'] }}', false)">
                                     <span class="bi bi-archive-fill">&nbsp;Archive</span>
                                 </a>
                             {% elif page_type == 'archive' %}
-                                <a class="btn btn-sm btn-success" onclick="unarchiveTweet('{{ bot_name }}', '{{ internal_id }}')">
+                                <a class="btn btn-sm btn-success" onclick="unarchiveTweet('{{ bot_name }}', '{{ tweet['_id'] }}')">
                                     <span class="bi bi-inbox-fill">&nbsp;Restore</span>
                                 </a>
-                                <a class="btn btn-sm btn-danger" onclick="deleteTweet('{{ bot_name }}', '{{ internal_id }}')">
+                                <a class="btn btn-sm btn-danger" onclick="deleteTweet('{{ bot_name }}', '{{ tweet['_id'] }}')">
                                     <span class="bi bi-trash-fill">&nbsp;Delete Forever</span>
                                 </a>
                             {% elif page_type == 'posted' %}
-                                <a class="btn btn-sm btn-primary" href="http://twitter.com/i/status/{{ twitter_id }}">
+                                <a class="btn btn-sm btn-primary" href="http://twitter.com/i/status/{{ tweet['twitter_id'] }}">
                                     <span class="bi bi-twitter">&nbsp;View on Twitter</span>
                                 </a>
                             {% endif %}
