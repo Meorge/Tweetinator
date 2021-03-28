@@ -1,5 +1,5 @@
 #!/usr/bin/python3.7
-from logging import debug
+import logging
 from os import wait
 import os.path
 from types import TracebackType
@@ -21,13 +21,17 @@ bot_thread = BotThread(wait_duration=60)
 bot_thread.daemon = True
 bot_thread.start()
 
-bot_thread.add_bot("example_bot")
+
 bot_thread.add_bot("gpt2upaguy")
-bot_thread.add_bot("gpt2writesjokes")
 bot_thread.add_bot("hd2dtitlegenerator")
+# bot_thread.add_bot("gpt2writesjokes")
+# bot_thread.add_bot("example_bot")
 
 abspath = os.path.abspath(__file__)
 log_file = os.path.join(os.path.dirname(abspath), "output.log")
+
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.WARNING)
 
 if __name__ == "__main__":
     print("hoo")
