@@ -111,6 +111,7 @@ def output_log():
 @app.route('/<bot_name>/tweets/<tweet_id>/edit')
 def edit_tweet(bot_name, tweet_id):
     this_tweet = bot_thread.get_tweet(bot_name, tweet_id)
+    print(this_tweet)
     return render_template("edit_tweet.html.j2", bot_name=bot_name, this_tweet=this_tweet, all_bot_data=bot_thread.get_all_bots_info())
 
 @app.route('/<bot_name>/redistribute')

@@ -10,7 +10,9 @@ import os.path
 from datetime import date, datetime, timedelta
 import shortuuid
 import random
+
 from pymongo import MongoClient
+from bson.objectid import ObjectId
 
 import logging
 
@@ -111,6 +113,8 @@ class Bot:
         return os.path.join(dname, f"{self.name}/media")
 
     def get_item_from_id(self, id):
+        print(f"looking for tweet with id {id}")
+        id = ObjectId(id)
         return tweet_db.find_one(id)
 
     def archive_item(self, id, ripple=False):
@@ -165,75 +169,16 @@ class Bot:
         self.write_archive_items(archive)
 
     def unarchive_item(self, id):
-        item_to_restore = self.get_item_from_id(id)
-        # print(item_to_restore)
-        
-        # remove item from archive
-        items = self.get_archive_items()
-        # print(items)
-        items.remove(item_to_restore)
-        self.write_archive_items(items)
-
-        # add it to the unposted
-        items = self.get_unposted_items()
-        items.append(item_to_restore)
-        self.write_unposted_items(items)
+        result = tweet_db.update_one({"_id": ObjectId(id)}, {"$set": {"status": "unposted"}})
+        return result
 
     def delete_item(self, id):
-        item_to_delete = self.get_archived_item_from_id(id)
-        items = self.get_archive_items()
-        items.remove(item_to_delete)
+        result = tweet_db.delete_one({"_id": ObjectId(id)})
+        return result
 
-        # print(f"Forever deleting: {json.dumps(item_to_delete)}")
-        self.write_archive_items(items)
-
-    def set_tweet(self, tweet_id, tweet_data):
-        old_tweet = self.get_unposted_item_from_id(tweet_id)
-        if old_tweet is not None:
-            # the tweet is in queue
-            new_tweet = self.get_updated_tweet(old_tweet, tweet_data)
-
-            # remove the old tweet from queue
-            queue = self.get_unposted_items()
-            queue = [item for item in queue if item["id"] != tweet_id]
-
-            # add new tweet to queue
-            queue.append(new_tweet)
-            queue = self.sort_items(queue)
-            self.write_unposted_items(queue)
-            return True
-
-        old_tweet = self.get_archived_item_from_id(tweet_id)
-        if old_tweet is not None:
-            # the tweet is in archive
-            new_tweet = self.get_updated_tweet(old_tweet, tweet_data)
-
-            # remove the old tweet from archive
-            archive = self.get_archive_items()
-            archive = [item for item in archive if item["id"] != tweet_id]
-
-            # add new tweet to archive
-            archive.append(new_tweet)
-            archive = self.sort_items(archive)
-            self.write_archive_items(archive)
-            return True
-
-        old_tweet = self.get_posted_item_from_id(tweet_id)
-        if old_tweet is not None:
-            # the tweet has already been posted (why are we editing it then? idk)
-            new_tweet = self.get_updated_tweet(old_tweet, tweet_data)
-
-            # remove the old tweet from posted
-            posted = self.get_posted_items()
-            posted = [item for item in posted if item["id"] != tweet_id]
-
-            # add new tweet to posted
-            posted.append(new_tweet)
-            posted = self.sort_items(posted)
-            self.write_posted_items(posted)
-            return True
-
-        return False
+    def set_tweet(self, id, data):
+        result = tweet_db.update_one({"_id": ObjectId(id)}, {"$set": data})
+        return result
 
     def new_tweet(self, tweet=None):
         
