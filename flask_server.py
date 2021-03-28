@@ -8,7 +8,7 @@ from flask import Flask, render_template, request
 import json
 from threading import Timer
 from traceback import print_tb
-
+from pathlib import Path
 # make sure to run the command
 # export FLASK_APP=flask_server.py
 # before running
@@ -23,7 +23,7 @@ bot_thread = BotThread(wait_duration=60)
 bot_thread.daemon = True
 
 
-with open('../bots.json', 'r') as f:
+with open(os.path.join(Path(__file__).parents[1], 'bots.json'), 'r') as f:
     loaded_bots = json.load(f)
 
     for i in loaded_bots:
