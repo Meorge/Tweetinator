@@ -163,8 +163,6 @@ class Bot:
     def new_tweet(self, tweet=None):
         if tweet is None: tweet = {}
 
-        print(f"Adding tweet - post_at is {tweet['post_at']}")
-
         tweet = {
             "text": tweet["text"] if "text" in tweet else "",
             "dont_reschedule": tweet["dont_reschedule"] if "dont_reschedule" in tweet else False,
@@ -176,6 +174,7 @@ class Bot:
             "archive_reason": None,
             "twitter_id": None
         }
+        print(f"Adding tweet - post_at is {tweet['post_at']}")
 
         return str(tweet_db.insert_one(tweet).inserted_id)
 
@@ -317,12 +316,14 @@ class Bot:
 
     def redistribute_tweets(self, redistrib_info):
         try:
-            initial_post_time = datetime.fromisoformat(redistrib_info["initialTime"])
+            initial_post_time = datetime.fromisoformat(redistrib_info["initialTime"] + "+00:00")
+
+            print(f"initial post time is at {initial_post_time}")
             interval = int(redistrib_info["interval"])
             shuffle = redistrib_info["shuffle"]
 
 
-            all_upcoming_can_reschedule = list(tweet_db.find({"bot_name": self.name, "dont_reschedule": False}))
+            all_upcoming_can_reschedule = list(tweet_db.find({"bot_name": self.name, "status": "unposted", "dont_reschedule": False}))
             # Shuffle the rescheduleable ones if wanted
             if shuffle: random.shuffle(all_upcoming_can_reschedule)
 
@@ -330,6 +331,7 @@ class Bot:
             # Stat with initial date
             current_post_time = initial_post_time
             for tweet in all_upcoming_can_reschedule:
+                print(f"tweet with text \"{tweet['text']}\" should be posted at {current_post_time}")
                 tweet_db.update_one({"_id": ObjectId(tweet["_id"])}, {"$set": {"post_at": current_post_time}})
                 current_post_time += timedelta(minutes=interval)
 

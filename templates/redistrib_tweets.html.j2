@@ -13,7 +13,7 @@
             $.ajax({
             url: "/api/{{ bot_name }}/redistribute",
             data: JSON.stringify({
-                "initialTime": document.getElementById("tweetInitialPostTime").value,
+                "initialTime": dayjs(document.getElementById("tweetInitialPostTime").value).utc().format("YYYY-MM-DDTHH:mm"),
                 "interval": document.getElementById("tweetIntervalPostTime").value,
                 "shuffle": document.getElementById("shuffleTweets").checked
             }),
