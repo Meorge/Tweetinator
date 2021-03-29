@@ -318,7 +318,6 @@ class Bot:
         try:
             initial_post_time = datetime.fromisoformat(redistrib_info["initialTime"] + "+00:00")
 
-            print(f"initial post time is at {initial_post_time}")
             interval = int(redistrib_info["interval"])
             shuffle = redistrib_info["shuffle"]
 
