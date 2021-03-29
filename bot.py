@@ -99,7 +99,11 @@ class Bot:
     def get_item_from_id(self, id):
         print(f"looking for tweet with id {id}")
         id = ObjectId(id)
-        return tweet_db.find_one(id)
+        try:
+            return tweet_db.find_one(id)
+        except Exception:
+            logging.exception(f"{self.name} - couldn't find Tweet with id {id}")
+            return None
 
     def archive_item(self, id, ripple=False):
         try:
@@ -207,17 +211,21 @@ class Bot:
         return follower_count
 
     def check_queue(self):
-        unposted_items = tweet_db.find({"bot_name": self.name, "post_at": {"$lt": datetime.utcnow()}})
-        for item in unposted_items:
-            logging.info(f"{self.name} - Time to tweet: {json.dumps(item)}")
-            twitter_id = self.tweet_item(item)
-            
-            if twitter_id is None:
-                # it failed for some reason
-                # add it to the archive
-                tweet_db.update_one({"_id": ObjectId(item["_id"])}, {"$set": {"status": "archived", "archive_reason": "Failed to post"}})
-            else:
-                tweet_db.update_one({"_id": ObjectId(item["_id"])}, {"$set": {"status": "posted", "twitter_id": twitter_id}})
+        try:
+            unposted_items = tweet_db.find({"bot_name": self.name, "post_at": {"$lte": datetime.utcnow()}})
+            for item in unposted_items:
+                logging.info(f"{self.name} - Time to tweet: {json.dumps(item)}")
+                twitter_id = self.tweet_item(item)
+                
+                if twitter_id is None:
+                    # it failed for some reason
+                    # add it to the archive
+                    tweet_db.update_one({"_id": ObjectId(item["_id"])}, {"$set": {"status": "archived", "archive_reason": "Failed to post"}})
+                else:
+                    tweet_db.update_one({"_id": ObjectId(item["_id"])}, {"$set": {"status": "posted", "twitter_id": twitter_id}})
+
+        except Exception:
+            logging.exception(f"{self.name} - error while checking queue")
 
     def tweet_item(self, item):
         # Authenticate
@@ -251,13 +259,14 @@ class Bot:
                 
 
                 # Next, search through all posted items and find a Tweet with matching Tweetinator ID
-                posted = self.get_posted_item_from_id(tweetinator_id)
+                posted = self.get_item_from_id(tweetinator_id)
 
                 if posted is not None and 'twitter_id' in posted:
                     twitter_id = posted["twitter_id"]
 
             status: tweepy.Status = api.update_status(status=text, media_ids=media_ids, in_reply_to_status_id=int(twitter_id))
             return status.id
+            
         except tweepy.TweepError:
             logging.exception(f"{self.name} - Error when trying to post Tweet")
             return None

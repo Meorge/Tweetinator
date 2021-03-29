@@ -9,6 +9,8 @@ import json
 from threading import Timer
 from traceback import print_tb
 from pathlib import Path
+
+from datetime import datetime, timezone
 # make sure to run the command
 # export FLASK_APP=flask_server.py
 # before running
@@ -55,7 +57,6 @@ def archive_tweet(bot_name, tweet_id):
     print("Archive tweet!")
 
     do_ripple = (request.args.get("ripple") == "true")
-    print(f"do ripple is {do_ripple}")
 
     bot_thread.archive_tweet(bot_name, tweet_id, do_ripple)
     return json.dumps(
@@ -215,6 +216,10 @@ def api_output_log():
         log_content = f"{e}"
 
     return log_content
+
+@app.template_filter('pretty_utc')
+def utc_to_local_and_pretty(date: datetime):
+    return date.replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%B %d, %Y at %I:%M %p") 
 
 
 @app.route('/')
