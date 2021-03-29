@@ -2,6 +2,7 @@ from os import access
 import re
 from time import sleep
 import signal
+import pymongo
 import tweepy
 from tweepy import api
 import json
@@ -101,59 +102,28 @@ class Bot:
         return tweet_db.find_one(id)
 
     def archive_item(self, id, ripple=False):
-        print("in archive_item")
-        archive_result = tweet_db.update_one({"_id": ObjectId(id)}, {"$set": {"status": "archived", "archive_reason": "Manual"}})
-        print(f"{archive_result.modified_count} modified")
-        print("done archiving")
-        # item_to_archive = self.get_item_from_id(id)
+        try:
+            archive_result = tweet_db.update_one({"_id": ObjectId(id)}, {"$set": {"status": "archived", "archive_reason": "Manual"}})
+            if ripple:
+                start = tweet_db.find_one({"_id": ObjectId(id)}, {"_id": 0, "post_at": 1})["post_at"]
 
-        # # remove item from unposted
-        # items = self.get_unposted_items()
-        # items.reverse()
+                # We want to move the items backwards
+                items_to_move = list(tweet_db.find({"bot_name": self.name, "status": "unposted", "post_at": {"$gt": start}}).sort('post_at'))
+                result = None
+                for tup in enumerate(items_to_move):
+                    i = tup[0]
+                    item = tup[1]
+                    if i == 0:
+                        # first, so set this tweet's post at date to the one we archived
+                        result = tweet_db.update_one({"_id": ObjectId(item['_id'])}, {"$set": {"post_at": start}})
+                    else:
+                        new_post_time = items_to_move[i-1]["post_at"]
+                        result = tweet_db.update_one({"_id": ObjectId(item['_id'])}, {"$set": {"post_at": new_post_time}})
 
-        # if ripple:
-        #     # Get index of item_to_archive
-        #     index_to_archive = items.index(item_to_archive)
-
-            
-
-        #     start_index = index_to_archive
-
-        #     # print(f"Ripple time! going from {start_index} to {0}")
-
-        #     # For all subsequent items, move their dates down
-        #     for i in range(0, start_index):
-        #         # print(i)
-        #         # print(items[i])
-        #         # print(items[i+1])
-                
-                
-                
-        #         # Skip an item if it's set to not reschedule
-        #         if items[i]["dont_reschedule"]: continue
-
-        #         # print(f"{i} - \"{items[i]['text']}\" {items[i]['post_at']} should now be posted at \"{items[i+1]['text']}\" {items[i+1]['post_at']} time")
-        #         # print("----")
-
-        #         # this item should take the post_at date of
-        #         # the item before it
-        #         items[i]["post_at"] = items[i+1]["post_at"]
-
-
-
-        #     # print("Done with ripple loop")
-
-
-        # items = [ item for item in items if item["id"] != item_to_archive["id"]]
-        # items.reverse()
-        # self.write_unposted_items(items)
-
-        # # print(f"Removing item {item_to_archive['text']} from queue")
-
-        # # add it to the archive
-        # archive = self.get_archive_items()
-        # archive.append(item_to_archive)
-        # self.write_archive_items(archive)
+            return archive_result
+        
+        except Exception as e:
+            logging.exception(f"{self.name} - Error archiving tweet")
 
     def unarchive_item(self, id):
         result = tweet_db.update_one({"_id": ObjectId(id)}, {"$set": {"status": "unposted"}})
@@ -173,7 +143,10 @@ class Bot:
 
         if "text" not in tweet: tweet["text"] = ""
         if "dont_reschedule" not in tweet: tweet["dont_reschedule"] = False
-        if "post_at" not in tweet: tweet["post_at"] = (datetime.now() + timedelta(days=1)).isoformat(timespec='seconds')
+        if "post_at" not in tweet:
+            tweet["post_at"] = (datetime.now() + timedelta(days=1))
+        else:
+            tweet["post_at"] = datetime.fromisoformat(tweet["post_at"])
         if "media" not in tweet: tweet["media"] = ["", "", "", ""]
         if "id" not in tweet: tweet["id"] = shortuuid.uuid()
         if "reply_to" not in tweet: tweet["reply_to"] = ""
@@ -290,15 +263,15 @@ class Bot:
             return None
 
     def get_upcoming_tweets(self, n=0):
-        tweets = list(tweet_db.find({"bot_name": self.name, "status": "unposted"}).limit(n))
+        tweets = list(tweet_db.find({"bot_name": self.name, "status": "unposted"}).sort("post_at", pymongo.ASCENDING).limit(n))
         return tweets
 
     def get_recent_tweets(self, n=0):
-        tweets = list(tweet_db.find({"bot_name": self.name, "status": "posted"}).limit(n))
+        tweets = list(tweet_db.find({"bot_name": self.name, "status": "posted"}).sort("post_at", pymongo.ASCENDING).limit(n))
         return tweets
 
     def get_archive_tweets(self, n=0):
-        tweets = list(tweet_db.find({"bot_name": self.name, "status": "archived"}).limit(n))
+        tweets = list(tweet_db.find({"bot_name": self.name, "status": "archived"}).sort("post_at", pymongo.ASCENDING).limit(n))
         return tweets
 
     def get_number_of_unposted_items(self):
@@ -319,27 +292,20 @@ class Bot:
             interval = int(redistrib_info["interval"])
             shuffle = redistrib_info["shuffle"]
 
-            all_upcoming = self.get_unposted_items()
 
-            all_upcoming_dont_reschedule = [ tweet for tweet in all_upcoming if tweet["dont_reschedule"] == True]
-            all_upcoming_can_reschedule = [ tweet for tweet in all_upcoming if tweet["dont_reschedule"] == False]
-
-            if shuffle:
-                random.shuffle(all_upcoming_can_reschedule)
+            all_upcoming_can_reschedule = list(tweet_db.find({"bot_name": self.name, "dont_reschedule": False}))
+            # Shuffle the rescheduleable ones if wanted
+            if shuffle: random.shuffle(all_upcoming_can_reschedule)
 
             # Let's set the dates!
             # Stat with initial date
             current_post_time = initial_post_time
             for tweet in all_upcoming_can_reschedule:
-                tweet["post_at"] = current_post_time.isoformat(timespec='seconds')
+                tweet_db.update_one({"_id": ObjectId(tweet["_id"])}, {"$set": {"post_at": current_post_time}})
                 current_post_time += timedelta(minutes=interval)
 
-            # Merge the two lists back together and sort
-            all_upcoming_new = sorted(all_upcoming_dont_reschedule + all_upcoming_can_reschedule, key=self.sort_by_date)
-
-            # Write these items to upcoming
-            self.write_unposted_items(all_upcoming_new)
         except Exception as e:
+            print('FAILED TO REDISTRIBUTE')
             logging.exception(f"{self.name} - Error when redistributing tweets")
             return { "response": "failure", "message": f"{e}"}
 
