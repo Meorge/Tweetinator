@@ -71,6 +71,6 @@ class BotThread(Thread):
     def run(self):
         while True:
             for bot_name, bot in self.bots.items():
-                # bot.check_queue()
+                bot.check_queue()
                 pass
             sleep(self.wait_duration)

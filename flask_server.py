@@ -30,7 +30,7 @@ with open(os.path.join(Path(__file__).parents[1], 'bots.json'), 'r') as f:
     for i in loaded_bots:
         bot_thread.add_bot(i)
 
-# bot_thread.start()
+bot_thread.start()
 
 abspath = os.path.abspath(__file__)
 log_file = os.path.join(os.path.dirname(abspath), "output.log")
@@ -147,7 +147,6 @@ def api_set_tweet(bot_name, tweet_id):
     dont_reschedule = data["dont_reschedule"] if "dont_reschedule" in data else None
     post_at = data["post_at"] if "post_at" in data else None
     media = data["media"] if "media" in data else None
-    id = data["id"] if "id" in data else tweet_id
     reply_to = data["reply_to"] if "reply_to" in data else None
 
     update_data = {
@@ -155,13 +154,12 @@ def api_set_tweet(bot_name, tweet_id):
         "dont_reschedule": dont_reschedule,
         "post_at": post_at,
         "media": media,
-        "id": id,
         "reply_to": reply_to
     }
 
     success = bot_thread.set_tweet(bot_name, tweet_id, update_data)
 
-    return { "response": "success" if success else "failure", "tweet_id": id }
+    return { "response": "success" if success else "failure", "tweet_id": tweet_id }
 
 @app.route('/api/<bot_name>/new_tweet')
 def api_new_tweet(bot_name):
@@ -172,8 +170,7 @@ def api_new_tweet(bot_name):
 @app.route('/api/<bot_name>/batch_add', methods=['POST'])
 def api_batch_add_tweets(bot_name):
     data = request.json
-    print(data)
-
+    print(f"Raw data received: {data}")
     successfully_added = 0
 
     try:
@@ -197,7 +194,6 @@ def api_redistribute_tweets(bot_name):
 
 @app.route('/api/log')
 def api_output_log():
-
     try:
         reverse_log = request.args.get('reverse')
     except:
@@ -217,9 +213,13 @@ def api_output_log():
 
     return log_content
 
-@app.template_filter('pretty_utc')
+@app.template_filter('utc_to_local_pretty')
 def utc_to_local_and_pretty(date: datetime):
-    return date.replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%B %d, %Y at %I:%M %p") 
+    return date.replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%B %d, %Y at %I:%M %p")
+
+@app.template_filter('utc_to_local_iso')
+def utc_to_local(date: datetime):
+    return date.replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%Y-%m-%dT%H:%M")
 
 
 @app.route('/')

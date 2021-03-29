@@ -15,7 +15,7 @@
                     {% for tweet in tweets %}
                     <tr>
                         <td style="width: 50%; word-wrap: break-word;">{{ tweet["text"].replace("\n", "<br>") }}</td>
-                        <td>{{ tweet["post_at"]|pretty_utc }}</td>
+                        <td>{{ tweet["post_at"]|utc_to_local_pretty }}</td>
                         <td>
                             {% if page_type != 'posted' %}
                                 <a class="btn btn-sm btn-primary" href="/{{ bot_name }}/tweets/{{ tweet['_id'] }}/edit">

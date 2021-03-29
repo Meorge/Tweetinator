@@ -8,7 +8,7 @@ from tweepy import api
 import json
 import csv
 import os.path
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 import shortuuid
 import random
 
@@ -40,6 +40,8 @@ class Bot:
     consumer_secret = None
     access_key = None
     access_secret = None
+
+    initialized = False
 
     def __init__(self, name):
         self.name = name
@@ -76,9 +78,13 @@ class Bot:
         # Now that the bot is ready to roll, let's make sure there are no tweets backed up
         # If there are, we'll send them to the archive
         try:
-            tweet_db.update_many({"bot_name": self.name, "post_at": {"$lt": datetime.utcnow()}}, {"$set": {"status": "archived", "archive_reason": "Queued prematurely"}})
+            tweets_premature = tweet_db.update_many({"bot_name": self.name, "status": "unposted", "post_at": {"$lt": datetime.utcnow()}}, {"$set": {"status": "archived", "archive_reason": "Queued prematurely"}})
+            logging.info(f"{self.name} - Archived {tweets_premature.modified_count} because they were queued for before now")
         except Exception:
             logging.exception(f"{self.name} - Couldn't complete backlog cleaning")
+
+        self.initialized = True
+        logging.info(f"{self.name} - initialization complete")
 
     def get_auth(self):
         return tweepy.OAuthHandler(self.consumer_key, self.consumer_secret)
@@ -138,27 +144,38 @@ class Bot:
         return result
 
     def set_tweet(self, id, data):
-        result = tweet_db.update_one({"_id": ObjectId(id)}, {"$set": data})
+        if "post_at" in data and data["post_at"] is not None:
+            data["post_at"] = datetime.fromisoformat(data["post_at"] + "+00:00")
+
+        print(f"Received timestamp is {data['post_at'].isoformat(timespec='minutes')}")
+
+
+        updates = {}
+        if "text" in data: updates["text"] = data["text"]
+        if "dont_reschedule" in data: updates["dont_reschedule"] = data["dont_reschedule"]
+        if "post_at" in data: updates["post_at"] = data["post_at"]
+        if "media" in data: updates["media"] = data["media"]
+        if "reply_to" in data: updates["reply_to"] = data["reply_to"]
+
+        result = tweet_db.update_one({"_id": ObjectId(id)}, {"$set": updates})
         return result
 
     def new_tweet(self, tweet=None):
-        
         if tweet is None: tweet = {}
 
-        if "text" not in tweet: tweet["text"] = ""
-        if "dont_reschedule" not in tweet: tweet["dont_reschedule"] = False
-        if "post_at" not in tweet:
-            tweet["post_at"] = (datetime.now() + timedelta(days=1))
-        else:
-            tweet["post_at"] = datetime.fromisoformat(tweet["post_at"])
-        if "media" not in tweet: tweet["media"] = ["", "", "", ""]
-        if "id" not in tweet: tweet["id"] = shortuuid.uuid()
-        if "reply_to" not in tweet: tweet["reply_to"] = ""
+        print(f"Adding tweet - post_at is {tweet['post_at']}")
 
-        # the mongoDB way
-        tweet["bot_name"] = self.name
-        tweet["status"] = "unposted"
-        tweet["archive_reason"] = None
+        tweet = {
+            "text": tweet["text"] if "text" in tweet else "",
+            "dont_reschedule": tweet["dont_reschedule"] if "dont_reschedule" in tweet else False,
+            "post_at": datetime.fromisoformat(tweet["post_at"] + "+00:00") if "post_at" in tweet else (datetime.utcnow() + timedelta(days=1)),
+            "media": tweet["media"] if "media" in tweet else ["", "", "", ""],
+            "reply_to": tweet["reply_to"] if "reply_to" in tweet else "",
+            "bot_name": self.name,
+            "status": "unposted",
+            "archive_reason": None,
+            "twitter_id": None
+        }
 
         return str(tweet_db.insert_one(tweet).inserted_id)
 
@@ -167,7 +184,6 @@ class Bot:
         if new_tweet["dont_reschedule"] is not None: old_tweet["dont_reschedule"] = new_tweet["dont_reschedule"]
         if new_tweet["post_at"] is not None: old_tweet["post_at"] = new_tweet["post_at"]
         if new_tweet["media"] is not None: old_tweet["media"] = new_tweet["media"]
-        if new_tweet["id"] is not None: old_tweet["id"] = new_tweet["id"]
         if new_tweet["reply_to"] is not None: old_tweet["reply_to"] = new_tweet["reply_to"]
         return old_tweet
 
@@ -211,10 +227,14 @@ class Bot:
         return follower_count
 
     def check_queue(self):
+        if not self.initialized:
+            logging.info(f"{self.name} - Initialization not finished, so returning")
+            return
+
         try:
-            unposted_items = tweet_db.find({"bot_name": self.name, "post_at": {"$lte": datetime.utcnow()}})
+            unposted_items = tweet_db.find({"bot_name": self.name, "status": "unposted", "post_at": {"$lte": datetime.utcnow()}})
             for item in unposted_items:
-                logging.info(f"{self.name} - Time to tweet: {json.dumps(item)}")
+                logging.info(f"{self.name} - Time to tweet: {item}")
                 twitter_id = self.tweet_item(item)
                 
                 if twitter_id is None:
@@ -253,7 +273,7 @@ class Bot:
 
         try:
             twitter_id = 0
-            if "reply_to" in item:
+            if "reply_to" in item and item["reply_to"] is not None and item["reply_to"] != "":
                 # First get the Tweetinator ID we want to reply to
                 tweetinator_id = item["reply_to"]
                 

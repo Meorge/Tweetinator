@@ -13,6 +13,7 @@
     <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.js"></script>
 
     <script src="https://unpkg.com/dayjs@1.8.21/dayjs.min.js"></script>
+    <script src="https://unpkg.com/dayjs@1.8.21/plugin/utc.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/underscore@1.12.0/underscore-min.js"></script>
     {# <script src="https://unpkg.com/dayjs@1.8.21/plugin/utc.js"></script> #}
     {# <script>dayjs.extend(window.dayjs_plugin_utc)</script> #}
@@ -20,6 +21,7 @@
     <script src="{{ url_for('static', filename='scripts/functions.js') }}" type="text/javascript"></script>
 
     <script type="text/javascript">
+        dayjs.extend(window.dayjs_plugin_utc)
         function toggleSidebar() {
             $("#sidebarMenu").toggleClass("show")
             $("#sidebarToggler").toggleClass("collapsed")

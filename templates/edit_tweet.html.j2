@@ -4,14 +4,20 @@
 
 {% block extra_head %}
 <script type="text/javascript">
+    
     $(document).ready(function() {
         $('#editTweetForm').submit(function() {
+            // We need to convert the local time to UTC time
+            let localPostAtTime = dayjs(document.getElementById("tweetPostTime").value)
+            console.log(localPostAtTime.format())
+            let utcPostAtTime = localPostAtTime.utc().format("YYYY-MM-DDTHH:mm")
+
             $.ajax({
             url: "/api/{{ bot_name }}/tweets/{{ this_tweet._id }}/set",
             data: JSON.stringify({
                 "text": document.getElementById("tweetText").value,
                 "dont_reschedule": document.getElementById("tweetPostDontReschedule").checked,
-                "post_at": document.getElementById("tweetPostTime").value,
+                "post_at": utcPostAtTime,
                 "media": [
                     document.getElementById("tweetMedia1").value,
                     document.getElementById("tweetMedia2").value,
@@ -64,8 +70,8 @@
                 <input type="checkbox" class="form-check-input" id="tweetPostDontReschedule" {{ "checked" if this_tweet.dont_reschedule else "" }}>
                 <label for="tweetPostDontReschedule" class="form-check-label">Don't reschedule this Tweet when redistributing the queue</label>
             </div>
-            <input type="datetime-local" class="form-control" id="tweetPostTime" value="{{ this_tweet.post_at }}" step="any">
-            <div class="form-text">The date should be in ISO 8601 format: Y-m-dTH:M:S.fz</div>
+            <input type="datetime-local" class="form-control" id="tweetPostTime" value="{{ this_tweet.post_at|utc_to_local_iso }}" step="any">
+            <div class="form-text">The date should be in ISO 8601 format: Y-m-dTH:M:S</div>
         </div>
         <div class="mb-3">
             <label for="tweetReplyId" class="form-label">Reply to Tweetinator ID</label>
