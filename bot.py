@@ -215,78 +215,61 @@ class Bot:
         return None
 
     def archive_item(self, id, ripple=False):
-        item_to_archive = self.get_item_from_id(id)
+        try:
+            item_to_archive = self.get_item_from_id(id)
 
-        # remove item from unposted
-        items = self.get_unposted_items()
-        items.reverse()
+            # remove item from unposted
+            items = self.get_unposted_items()
+            items.reverse()
 
-        if ripple:
-            # Get index of item_to_archive
-            index_to_archive = items.index(item_to_archive)
+            if ripple:
+                # Get index of item_to_archive
+                index_to_archive = items.index(item_to_archive)
+                start_index = index_to_archive
 
-            
+                # For all subsequent items, move their dates down
+                for i in range(0, start_index):
+                    # Skip an item if it's set to not reschedule
+                    if items[i]["dont_reschedule"]: continue
+                    items[i]["post_at"] = items[i+1]["post_at"]
 
-            start_index = index_to_archive
+            items = [ item for item in items if item["id"] != item_to_archive["id"]]
+            items.reverse()
+            self.write_unposted_items(items)
 
-            # print(f"Ripple time! going from {start_index} to {0}")
-
-            # For all subsequent items, move their dates down
-            for i in range(0, start_index):
-                # print(i)
-                # print(items[i])
-                # print(items[i+1])
-                
-                
-                
-                # Skip an item if it's set to not reschedule
-                if items[i]["dont_reschedule"]: continue
-
-                # print(f"{i} - \"{items[i]['text']}\" {items[i]['post_at']} should now be posted at \"{items[i+1]['text']}\" {items[i+1]['post_at']} time")
-                # print("----")
-
-                # this item should take the post_at date of
-                # the item before it
-                items[i]["post_at"] = items[i+1]["post_at"]
-
-
-
-            # print("Done with ripple loop")
-
-
-        items = [ item for item in items if item["id"] != item_to_archive["id"]]
-        items.reverse()
-        self.write_unposted_items(items)
-
-        # print(f"Removing item {item_to_archive['text']} from queue")
-
-        # add it to the archive
-        archive = self.get_archive_items()
-        archive.append(item_to_archive)
-        self.write_archive_items(archive)
+            # add it to the archive
+            archive = self.get_archive_items()
+            archive.append(item_to_archive)
+            self.write_archive_items(archive)
+        except Exception:
+            logging.exception(f"{self.name} - error while archiving item")
+            return
 
     def unarchive_item(self, id):
-        item_to_restore = self.get_item_from_id(id)
-        # print(item_to_restore)
-        
-        # remove item from archive
-        items = self.get_archive_items()
-        # print(items)
-        items.remove(item_to_restore)
-        self.write_archive_items(items)
+        try:
+            item_to_restore = self.get_item_from_id(id)
+            
+            # remove item from archive
+            items = self.get_archive_items()
+            # print(items)
+            items.remove(item_to_restore)
+            self.write_archive_items(items)
 
-        # add it to the unposted
-        items = self.get_unposted_items()
-        items.append(item_to_restore)
-        self.write_unposted_items(items)
+            # add it to the unposted
+            items = self.get_unposted_items()
+            items.append(item_to_restore)
+            self.write_unposted_items(items)
+        except Exception:
+            logging.exception(f"{self.name} - error while unarchiving item")
 
     def delete_item(self, id):
-        item_to_delete = self.get_archived_item_from_id(id)
-        items = self.get_archive_items()
-        items.remove(item_to_delete)
-
-        # print(f"Forever deleting: {json.dumps(item_to_delete)}")
-        self.write_archive_items(items)
+        try:
+            item_to_delete = self.get_archived_item_from_id(id)
+            items = self.get_archive_items()
+            items.remove(item_to_delete)
+            self.write_archive_items(items)
+        except Exception:
+            logging.exception(f"{self.name} - error while deleting item")
 
     def set_tweet(self, tweet_id, tweet_data):
         old_tweet = self.get_unposted_item_from_id(tweet_id)
@@ -489,7 +472,7 @@ class Bot:
                 media_ids = [api.media_upload(path).media_id_string for path in media_paths]
             except Exception:
                 logging.exception(f"{self.name} - Error when trying to upload media")
-                return None
+                media_ids = []
 
         try:
             twitter_id = 0
