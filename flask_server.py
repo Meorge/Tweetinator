@@ -11,6 +11,7 @@ from traceback import print_tb
 from pathlib import Path
 
 from datetime import datetime, timezone
+from dateutil import tz
 # make sure to run the command
 # export FLASK_APP=flask_server.py
 # before running
@@ -215,7 +216,7 @@ def api_output_log():
 
 @app.template_filter('utc_to_local_pretty')
 def utc_to_local_and_pretty(date: datetime):
-    return date.replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%B %d, %Y at %I:%M %p")
+    return date.replace(tzinfo=timezone.utc).astimezone().strftime("%B %d, %Y at %I:%M %p")
 
 @app.template_filter('utc_to_local_iso')
 def utc_to_local(date: datetime):
