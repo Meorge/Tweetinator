@@ -131,7 +131,7 @@ class Bot:
                         result = tweet_db.update_one({"_id": ObjectId(item['_id'])}, {"$set": {"post_at": new_post_time}})
 
             return archive_result
-        
+
         except Exception as e:
             logging.exception(f"{self.name} - Error archiving tweet")
 
@@ -268,7 +268,7 @@ class Bot:
                 media_ids = [api.media_upload(path).media_id_string for path in media_paths]
             except Exception:
                 logging.exception(f"{self.name} - Error when trying to upload media")
-                return None
+                media_ids = []
 
         try:
             twitter_id = 0
