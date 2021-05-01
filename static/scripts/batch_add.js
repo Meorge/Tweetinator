@@ -173,11 +173,16 @@ function uploadTweets(tweets) {
     let botName = $('#bot_name').data().name;
 
     let serializedTweets = tweets.map((tweet) => {
+        // console.log(`tweet.postDate);
+        console.log(`${tweet.postDate}`);
+        console.log(tweet.postDate.utc().format("YYYY-MM-DDTHH:mm"));
         return {
             "text": tweet.text,
-            "post_at": tweet.postDate.format("YYYY-MM-DDTHH:mm")
+            "post_at": tweet.postDate.utc().format("YYYY-MM-DDTHH:mm")
         };
     });
+
+    console.log(serializedTweets);
 
     $.ajax({
         url: `/api/${botName}/batch_add`,

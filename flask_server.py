@@ -9,6 +9,8 @@ import json
 from threading import Timer
 from traceback import print_tb
 from pathlib import Path
+
+from datetime import datetime, timezone
 # make sure to run the command
 # export FLASK_APP=flask_server.py
 # before running
@@ -21,7 +23,6 @@ app.jinja_env.auto_reload = True
 
 bot_thread = BotThread(wait_duration=60)
 bot_thread.daemon = True
-
 
 with open(os.path.join(Path(__file__).parents[1], 'bots.json'), 'r') as f:
     loaded_bots = json.load(f)
@@ -46,8 +47,7 @@ def upcoming_tweets(bot_name):
     all_bot_data = bot_thread.get_all_bots_info()
 
     if bot_name in bot_thread.bots:
-        tweets = bot_thread.get_upcoming_tweets(bot_name, n=9999, time_format="%B %d, %Y at %I:%M:%S %p")
-        number_of_items = bot_thread.get_number_of_all_items(bot_name)
+        tweets = bot_thread.get_upcoming_tweets(bot_name)
         return render_template("upcoming.html.j2", bot_name=bot_name, tweets=tweets, all_bot_data=all_bot_data)
     else:
         return f"No bot is registered with name {bot_name}"
@@ -57,7 +57,6 @@ def archive_tweet(bot_name, tweet_id):
     print("Archive tweet!")
 
     do_ripple = (request.args.get("ripple") == "true")
-    print(f"do ripple is {do_ripple}")
 
     bot_thread.archive_tweet(bot_name, tweet_id, do_ripple)
     return json.dumps(
@@ -90,8 +89,7 @@ def delete_tweet(bot_name, tweet_id):
 def recent_tweets(bot_name):
     all_bot_data = bot_thread.get_all_bots_info()
     if bot_name in bot_thread.bots:
-        tweets = bot_thread.get_recent_tweets(bot_name, n=9999, time_format="%B %d, %Y at %I:%M:%S %p")
-        number_of_items = bot_thread.get_number_of_all_items(bot_name)
+        tweets = bot_thread.get_recent_tweets(bot_name)
         return render_template("posted.html.j2", bot_name=bot_name, tweets=tweets, all_bot_data=all_bot_data)
     else:
         return f"No bot is registered with name {bot_name}"
@@ -100,12 +98,10 @@ def recent_tweets(bot_name):
 def archive_tweets(bot_name):
     all_bot_data = bot_thread.get_all_bots_info()
     if bot_name in bot_thread.bots:
-        tweets = bot_thread.get_archive_tweets(bot_name, n=9999, time_format="%B %d, %Y at %I:%M:%S %p")
-        number_of_items = bot_thread.get_number_of_all_items(bot_name)
+        tweets = bot_thread.get_archive_tweets(bot_name, n=9999)
         return render_template("archive.html.j2", bot_name=bot_name, tweets=tweets, all_bot_data=all_bot_data)
     else:
         return f"No bot is registered with name {bot_name}"
-
 
 @app.route('/log')
 def output_log():
@@ -115,6 +111,7 @@ def output_log():
 @app.route('/<bot_name>/tweets/<tweet_id>/edit')
 def edit_tweet(bot_name, tweet_id):
     this_tweet = bot_thread.get_tweet(bot_name, tweet_id)
+    print(this_tweet)
     return render_template("edit_tweet.html.j2", bot_name=bot_name, this_tweet=this_tweet, all_bot_data=bot_thread.get_all_bots_info())
 
 @app.route('/<bot_name>/redistribute')
@@ -150,7 +147,6 @@ def api_set_tweet(bot_name, tweet_id):
     dont_reschedule = data["dont_reschedule"] if "dont_reschedule" in data else None
     post_at = data["post_at"] if "post_at" in data else None
     media = data["media"] if "media" in data else None
-    id = data["id"] if "id" in data else tweet_id
     reply_to = data["reply_to"] if "reply_to" in data else None
 
     update_data = {
@@ -158,13 +154,12 @@ def api_set_tweet(bot_name, tweet_id):
         "dont_reschedule": dont_reschedule,
         "post_at": post_at,
         "media": media,
-        "id": id,
         "reply_to": reply_to
     }
 
     success = bot_thread.set_tweet(bot_name, tweet_id, update_data)
 
-    return { "response": "success" if success else "failure", "tweet_id": id }
+    return { "response": "success" if success else "failure", "tweet_id": tweet_id }
 
 @app.route('/api/<bot_name>/new_tweet')
 def api_new_tweet(bot_name):
@@ -175,8 +170,7 @@ def api_new_tweet(bot_name):
 @app.route('/api/<bot_name>/batch_add', methods=['POST'])
 def api_batch_add_tweets(bot_name):
     data = request.json
-    print(data)
-
+    print(f"Raw data received: {data}")
     successfully_added = 0
 
     try:
@@ -200,7 +194,6 @@ def api_redistribute_tweets(bot_name):
 
 @app.route('/api/log')
 def api_output_log():
-
     try:
         reverse_log = request.args.get('reverse')
     except:
@@ -219,6 +212,14 @@ def api_output_log():
         log_content = f"{e}"
 
     return log_content
+
+@app.template_filter('utc_to_local_pretty')
+def utc_to_local_and_pretty(date: datetime):
+    return date.replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%B %d, %Y at %I:%M %p")
+
+@app.template_filter('utc_to_local_iso')
+def utc_to_local(date: datetime):
+    return date.replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%Y-%m-%dT%H:%M")
 
 
 @app.route('/')

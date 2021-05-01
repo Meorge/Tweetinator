@@ -2,18 +2,28 @@ from os import access
 import re
 from time import sleep
 import signal
+import pymongo
 import tweepy
 from tweepy import api
 import json
 import csv
 import os.path
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 import shortuuid
 import random
+
+from pymongo import MongoClient
+from bson.objectid import ObjectId
 
 import logging
 
 from pathlib import Path
+
+# Log into database
+database_client = MongoClient()
+tweet_db = database_client.tweetinator.tweets
+
+
 
 abspath = os.path.abspath(__file__)
 dname = os.path.abspath(os.path.join(os.path.dirname(abspath), "/bots"))
@@ -30,6 +40,8 @@ class Bot:
     consumer_secret = None
     access_key = None
     access_secret = None
+
+    initialized = False
 
     def __init__(self, name):
         self.name = name
@@ -66,45 +78,13 @@ class Bot:
         # Now that the bot is ready to roll, let's make sure there are no tweets backed up
         # If there are, we'll send them to the archive
         try:
-            unposted = self.get_unposted_items()
-            now = datetime.now()
-            backed_up = []
-            for tweet in unposted:
-                if datetime.fromisoformat(tweet["post_at"]) < now:
-                    logging.info(f"{self.name} - tweet {tweet} was queued for before now, so sending it to the archive")
-                    tweet["archive_reason"] = "Queued prematurely"
-                    backed_up.append(tweet)
-
-            unposted_without_backed_up = [ tweet for tweet in unposted if tweet not in backed_up ]
-
-            self.write_unposted_items(unposted_without_backed_up)
-
-            archived = self.get_archive_items()
-            archived = self.sort_items(archived + backed_up, reverse=False)
-
-            self.write_archive_items(archived)
-
+            tweets_premature = tweet_db.update_many({"bot_name": self.name, "status": "unposted", "post_at": {"$lt": datetime.utcnow()}}, {"$set": {"status": "archived", "archive_reason": "Queued prematurely"}})
+            logging.info(f"{self.name} - Archived {tweets_premature.modified_count} because they were queued for before now")
         except Exception:
             logging.exception(f"{self.name} - Couldn't complete backlog cleaning")
 
-    def no_access_info(self, config, access_json_filename):
-        auth = self.get_auth()
-        if "verifier" not in config:
-            print(f"Access token data not found. Please go to this link and authenticate: {auth.get_authorization_url()}")
-            print(f"Once verified, paste the code below.")
-            verifier = input("> ")
-
-            try:
-                self.access_key, self.access_secret = auth.get_access_token(verifier)
-            except tweepy.TweepError as e:
-                raise Exception(f"Failed to get access token: {e}")
-            
-            access_json = {"access_key": self.access_key, "access_secret": self.access_secret}
-
-            # Write stuff to access_keys.json
-            access_json_file = open(access_json_filename, "w")
-            json.dump(access_json, access_json_file, indent=4)
-            access_json_file.close()
+        self.initialized = True
+        logging.info(f"{self.name} - initialization complete")
 
     def get_auth(self):
         return tweepy.OAuthHandler(self.consumer_key, self.consumer_secret)
@@ -115,18 +95,6 @@ class Bot:
         return tweepy.API(auth)
 
     @property
-    def unposted_items_filename(self):
-        return os.path.join(dname, f"{self.name}/posts.json")
-
-    @property
-    def posted_items_filename(self):
-        return os.path.join(dname, f"{self.name}/completed.json")
-
-    @property
-    def archive_items_filename(self):
-        return os.path.join(dname, f"{self.name}/archive.json")
-
-    @property
     def follower_counts_filename(self):
         return os.path.join(dname, f"{self.name}/followers.csv")
 
@@ -134,223 +102,89 @@ class Bot:
     def media_foldername(self):
         return os.path.join(dname, f"{self.name}/media")
 
-    @property
-    def sort_by_date(self):
-        return lambda i: datetime.fromisoformat(i["post_at"])
-
-    def load_json(self, filename):
-        items = []
-        try:
-            if os.path.exists(filename):
-                f = open(filename, "r")
-                try:
-                    items = json.load(f)
-                except json.decoder.JSONDecodeError:
-                    logging.exception(f"{self.name} - Error decoding JSON from {filename}")
-                finally:
-                    f.close()
-        except IOError:
-            logging.exception(f"{self.name} - Error reading {filename}")
-        return items
-
-    def write_json(self, filename, items):
-        try:
-            with open(filename, "w") as f:
-                json.dump(items, f, indent=4)
-        except IOError:
-            logging.exception(f"{self.name} - Error writing writing to {filename}")
-        except json.decoder.JSONDecodeError:
-            logging.exception(f"{self.name} - Error writing JSON to {filename}")
-
-    def get_unposted_items(self):
-        return self.load_json(self.unposted_items_filename)
-
-    def write_unposted_items(self, items):
-        self.write_json(self.unposted_items_filename, items)
-
-    def get_posted_items(self):
-        return self.load_json(self.posted_items_filename)
-
-    def write_posted_items(self, items):
-        self.write_json(self.posted_items_filename, items)
-
-    def get_archive_items(self):
-        return self.load_json(self.archive_items_filename)
-
-    def write_archive_items(self, items):
-        self.write_json(self.archive_items_filename, items)
-
-    def sort_items(self, items, reverse=False):
-        return sorted(items, key = self.sort_by_date, reverse=reverse)
-
     def get_item_from_id(self, id):
-        # see if item is unposted
-        result = self.get_unposted_item_from_id(id)
-        if result != None: return result
-        
-        # not in unposted items, so check posted items
-        result = self.get_posted_item_from_id(id)
-        if result != None: return result
-        
-        # not in posted items, so check archive
-        return self.get_archived_item_from_id(id)
-
-    def get_unposted_item_from_id(self, id):
-        items = self.get_unposted_items()
-        for i in items:
-            if i["id"] == id: return i
-        return None
-
-    def get_posted_item_from_id(self, id):
-        items = self.get_posted_items()
-        for i in items:
-            if i["id"] == id: return i
-        return None
-
-    def get_archived_item_from_id(self, id):
-        items = self.get_archive_items()
-        for i in items:
-            if i["id"] == id: return i
-
-        return None
+        print(f"looking for tweet with id {id}")
+        id = ObjectId(id)
+        try:
+            return tweet_db.find_one(id)
+        except Exception:
+            logging.exception(f"{self.name} - couldn't find Tweet with id {id}")
+            return None
 
     def archive_item(self, id, ripple=False):
         try:
-            item_to_archive = self.get_item_from_id(id)
-
-            # remove item from unposted
-            items = self.get_unposted_items()
-            items.reverse()
-
+            archive_result = tweet_db.update_one({"_id": ObjectId(id)}, {"$set": {"status": "archived", "archive_reason": "Manual"}})
             if ripple:
-                # Get index of item_to_archive
-                index_to_archive = items.index(item_to_archive)
-                start_index = index_to_archive
+                start = tweet_db.find_one({"_id": ObjectId(id)}, {"_id": 0, "post_at": 1})["post_at"]
 
-                # For all subsequent items, move their dates down
-                for i in range(0, start_index):
-                    # Skip an item if it's set to not reschedule
-                    if items[i]["dont_reschedule"]: continue
-                    items[i]["post_at"] = items[i+1]["post_at"]
+                # We want to move the items backwards
+                items_to_move = list(tweet_db.find({"bot_name": self.name, "status": "unposted", "post_at": {"$gt": start}}).sort('post_at'))
+                result = None
+                for tup in enumerate(items_to_move):
+                    i = tup[0]
+                    item = tup[1]
+                    if i == 0:
+                        # first, so set this tweet's post at date to the one we archived
+                        result = tweet_db.update_one({"_id": ObjectId(item['_id'])}, {"$set": {"post_at": start}})
+                    else:
+                        new_post_time = items_to_move[i-1]["post_at"]
+                        result = tweet_db.update_one({"_id": ObjectId(item['_id'])}, {"$set": {"post_at": new_post_time}})
 
-            items = [ item for item in items if item["id"] != item_to_archive["id"]]
-            items.reverse()
-            self.write_unposted_items(items)
+            return archive_result
 
-            # add it to the archive
-            archive = self.get_archive_items()
-            archive.append(item_to_archive)
-            self.write_archive_items(archive)
-        except Exception:
-            logging.exception(f"{self.name} - error while archiving item")
-            return
+        except Exception as e:
+            logging.exception(f"{self.name} - Error archiving tweet")
 
     def unarchive_item(self, id):
-        try:
-            item_to_restore = self.get_item_from_id(id)
-            
-            # remove item from archive
-            items = self.get_archive_items()
-            # print(items)
-            items.remove(item_to_restore)
-            self.write_archive_items(items)
-
-            # add it to the unposted
-            items = self.get_unposted_items()
-            items.append(item_to_restore)
-            self.write_unposted_items(items)
-        except Exception:
-            logging.exception(f"{self.name} - error while unarchiving item")
+        result = tweet_db.update_one({"_id": ObjectId(id)}, {"$set": {"status": "unposted"}})
+        return result
 
     def delete_item(self, id):
-        try:
-            item_to_delete = self.get_archived_item_from_id(id)
-            items = self.get_archive_items()
-            items.remove(item_to_delete)
-            self.write_archive_items(items)
-        except Exception:
-            logging.exception(f"{self.name} - error while deleting item")
+        result = tweet_db.delete_one({"_id": ObjectId(id)})
+        return result
 
-    def set_tweet(self, tweet_id, tweet_data):
-        old_tweet = self.get_unposted_item_from_id(tweet_id)
-        if old_tweet is not None:
-            # the tweet is in queue
-            new_tweet = self.get_updated_tweet(old_tweet, tweet_data)
+    def set_tweet(self, id, data):
+        if "post_at" in data and data["post_at"] is not None:
+            data["post_at"] = datetime.fromisoformat(data["post_at"] + "+00:00")
 
-            # remove the old tweet from queue
-            queue = self.get_unposted_items()
-            queue = [item for item in queue if item["id"] != tweet_id]
+        print(f"Received timestamp is {data['post_at'].isoformat(timespec='minutes')}")
 
-            # add new tweet to queue
-            queue.append(new_tweet)
-            queue = self.sort_items(queue)
-            self.write_unposted_items(queue)
-            return True
 
-        old_tweet = self.get_archived_item_from_id(tweet_id)
-        if old_tweet is not None:
-            # the tweet is in archive
-            new_tweet = self.get_updated_tweet(old_tweet, tweet_data)
+        updates = {}
+        if "text" in data: updates["text"] = data["text"]
+        if "dont_reschedule" in data: updates["dont_reschedule"] = data["dont_reschedule"]
+        if "post_at" in data: updates["post_at"] = data["post_at"]
+        if "media" in data: updates["media"] = data["media"]
+        if "reply_to" in data: updates["reply_to"] = data["reply_to"]
 
-            # remove the old tweet from archive
-            archive = self.get_archive_items()
-            archive = [item for item in archive if item["id"] != tweet_id]
-
-            # add new tweet to archive
-            archive.append(new_tweet)
-            archive = self.sort_items(archive)
-            self.write_archive_items(archive)
-            return True
-
-        old_tweet = self.get_posted_item_from_id(tweet_id)
-        if old_tweet is not None:
-            # the tweet has already been posted (why are we editing it then? idk)
-            new_tweet = self.get_updated_tweet(old_tweet, tweet_data)
-
-            # remove the old tweet from posted
-            posted = self.get_posted_items()
-            posted = [item for item in posted if item["id"] != tweet_id]
-
-            # add new tweet to posted
-            posted.append(new_tweet)
-            posted = self.sort_items(posted)
-            self.write_posted_items(posted)
-            return True
-
-        return False
+        result = tweet_db.update_one({"_id": ObjectId(id)}, {"$set": updates})
+        return result
 
     def new_tweet(self, tweet=None):
-        
         if tweet is None: tweet = {}
 
-        if "text" not in tweet: tweet["text"] = ""
-        if "dont_reschedule" not in tweet: tweet["dont_reschedule"] = False
-        if "post_at" not in tweet: tweet["post_at"] = (datetime.now() + timedelta(days=1)).isoformat(timespec='seconds')
-        if "media" not in tweet: tweet["media"] = ["", "", "", ""]
-        if "id" not in tweet: tweet["id"] = shortuuid.uuid()
-        if "reply_to" not in tweet: tweet["reply_to"] = ""
+        tweet = {
+            "text": tweet["text"] if "text" in tweet else "",
+            "dont_reschedule": tweet["dont_reschedule"] if "dont_reschedule" in tweet else False,
+            "post_at": datetime.fromisoformat(tweet["post_at"] + "+00:00") if "post_at" in tweet else (datetime.utcnow() + timedelta(days=1)),
+            "media": tweet["media"] if "media" in tweet else ["", "", "", ""],
+            "reply_to": tweet["reply_to"] if "reply_to" in tweet else "",
+            "bot_name": self.name,
+            "status": "unposted",
+            "archive_reason": None,
+            "twitter_id": None
+        }
+        print(f"Adding tweet - post_at is {tweet['post_at']}")
 
-        # add this new tweet to unposted
-        unposted = self.get_unposted_items()
-        unposted.append(tweet)
-        self.sort_items(unposted)
-        self.write_unposted_items(unposted)
-        return tweet["id"]
+        return str(tweet_db.insert_one(tweet).inserted_id)
 
     def get_updated_tweet(self, old_tweet, new_tweet):
         if new_tweet["text"] is not None: old_tweet["text"] = new_tweet["text"]
         if new_tweet["dont_reschedule"] is not None: old_tweet["dont_reschedule"] = new_tweet["dont_reschedule"]
         if new_tweet["post_at"] is not None: old_tweet["post_at"] = new_tweet["post_at"]
         if new_tweet["media"] is not None: old_tweet["media"] = new_tweet["media"]
-        if new_tweet["id"] is not None: old_tweet["id"] = new_tweet["id"]
         if new_tweet["reply_to"] is not None: old_tweet["reply_to"] = new_tweet["reply_to"]
         return old_tweet
-
-    def sort_queue(self):
-        unposted_items = self.sort_items(self.get_unposted_items())
-        self.write_unposted_items(unposted_items)
-        posted_items = self.sort_items(self.get_posted_items())
-        self.write_posted_items(posted_items)
 
     def write_follower_counts(self, data):
         with open(self.follower_counts_filename, "w") as f:
@@ -392,63 +226,25 @@ class Bot:
         return follower_count
 
     def check_queue(self):
-        # Disabling for now
-        # self.get_last_follower_count()
-        if not os.path.exists(self.unposted_items_filename):
-            logging.info(f"{self.name} - {self.unposted_items_filename} doesn't exist, so there are no posts to post")
+        if not self.initialized:
+            logging.info(f"{self.name} - Initialization not finished, so returning")
             return
 
-        # ok so we have the file
-        unposted_items = self.get_unposted_items()
-
-        # now we've got stuff to sort through
-        new_unposted = unposted_items.copy()
-
-
-        posted_this_time = []
-        for item in unposted_items:
-            # check the date on the item
-
-            if item["post_at"] == "": continue
-            
-            item_post_date = datetime.fromisoformat(item["post_at"])
-            if item_post_date < datetime.now():
-                logging.info(f"{self.name} - Time to tweet: {json.dumps(item)}")
-                updated_item = item.copy()
-                updated_item["twitter_id"] = self.tweet_item(item)
-                new_unposted.remove(item)
+        try:
+            unposted_items = tweet_db.find({"bot_name": self.name, "status": "unposted", "post_at": {"$lte": datetime.utcnow()}})
+            for item in unposted_items:
+                logging.info(f"{self.name} - Time to tweet: {item}")
+                twitter_id = self.tweet_item(item)
                 
-                if updated_item["twitter_id"] is None:
+                if twitter_id is None:
                     # it failed for some reason
                     # add it to the archive
-                    updated_item["archive_reason"] = "Failed to post"
-                    archive = self.get_archive_items()
-                    archive.append(updated_item)
-                    self.write_archive_items(archive)
-
-                    # remove it from the queue
-                    queue = self.get_unposted_items()
-                    queue.remove(item)
-                    self.write_unposted_items(queue)
+                    tweet_db.update_one({"_id": ObjectId(item["_id"])}, {"$set": {"status": "archived", "archive_reason": "Failed to post"}})
                 else:
-                    posted_this_time.append(updated_item)
+                    tweet_db.update_one({"_id": ObjectId(item["_id"])}, {"$set": {"status": "posted", "twitter_id": twitter_id}})
 
-        # if nothing was posted, we don't have to do anything
-        if len(posted_this_time) == 0: return
-        # print(f"New unposted: {new_unposted}")
-
-        # sort the unposted items
-        new_unposted = self.sort_items(new_unposted)
-
-        # update the unposted items file
-        self.write_unposted_items(new_unposted)
-
-        # update the posted items file
-
-        posted_before = self.get_posted_items()
-        posted_all = sorted(posted_before + posted_this_time, key = self.sort_by_date)
-
-        self.write_posted_items(posted_all)
+        except Exception:
+            logging.exception(f"{self.name} - error while checking queue")
 
     def tweet_item(self, item):
         # Authenticate
@@ -476,83 +272,70 @@ class Bot:
 
         try:
             twitter_id = 0
-            if "reply_to" in item:
+            if "reply_to" in item and item["reply_to"] is not None and item["reply_to"] != "":
                 # First get the Tweetinator ID we want to reply to
                 tweetinator_id = item["reply_to"]
                 
 
                 # Next, search through all posted items and find a Tweet with matching Tweetinator ID
-                posted = self.get_posted_item_from_id(tweetinator_id)
+                posted = self.get_item_from_id(tweetinator_id)
 
                 if posted is not None and 'twitter_id' in posted:
                     twitter_id = posted["twitter_id"]
 
             status: tweepy.Status = api.update_status(status=text, media_ids=media_ids, in_reply_to_status_id=int(twitter_id))
             return status.id
+            
         except tweepy.TweepError:
             logging.exception(f"{self.name} - Error when trying to post Tweet")
             return None
 
-    def get_first_n_items(self, items, n, time_format):
-        output_items = []
-        for item in items[:min(n, len(items))]:
-            date_obj = datetime.fromisoformat(item["post_at"])
+    def get_upcoming_tweets(self, n=0):
+        tweets = list(tweet_db.find({"bot_name": self.name, "status": "unposted"}).sort("post_at", pymongo.ASCENDING).limit(n))
+        return tweets
 
-            date_string = datetime.strftime(date_obj, time_format)
-            output_items.append((item["text"], item["id"], date_string, item["twitter_id"] if "twitter_id" in item else None))
-        return output_items
+    def get_recent_tweets(self, n=0):
+        tweets = list(tweet_db.find({"bot_name": self.name, "status": "posted"}).sort("post_at", pymongo.ASCENDING).limit(n))
+        return tweets
 
-    def get_upcoming_tweets(self, n=10, time_format=__default_date_string__):
-        items = self.sort_items(self.get_unposted_items())
-        return self.get_first_n_items(items, n, time_format)
-
-    def get_recent_tweets(self, n=10, time_format=__default_date_string__):
-        items = self.sort_items(self.get_posted_items(), reverse=True)
-        return self.get_first_n_items(items, n, time_format)
-
-    def get_archive_tweets(self, n=10, time_format=__default_date_string__):
-        items = self.sort_items(self.get_archive_items(), reverse=True)
-        return self.get_first_n_items(items, n, time_format)
+    def get_archive_tweets(self, n=0):
+        tweets = list(tweet_db.find({"bot_name": self.name, "status": "archived"}).sort("post_at", pymongo.ASCENDING).limit(n))
+        return tweets
 
     def get_number_of_unposted_items(self):
-        return len(self.get_unposted_items())
+        return tweet_db.count_documents({"bot_name": self.name, "status": "unposted"})
 
     def get_number_of_posted_items(self):
-        return len(self.get_posted_items())
+        return tweet_db.count_documents({"bot_name": self.name, "status": "posted"})
 
     def get_number_of_archived_items(self):
-        return len(self.get_archive_items())
+        return tweet_db.count_documents({"bot_name": self.name, "status": "archived"})
 
     def get_number_of_all_items(self):
         return (self.get_number_of_unposted_items(), self.get_number_of_posted_items(), self.get_number_of_archived_items())
 
     def redistribute_tweets(self, redistrib_info):
         try:
-            initial_post_time = datetime.fromisoformat(redistrib_info["initialTime"])
+            initial_post_time = datetime.fromisoformat(redistrib_info["initialTime"] + "+00:00")
+
             interval = int(redistrib_info["interval"])
             shuffle = redistrib_info["shuffle"]
 
-            all_upcoming = self.get_unposted_items()
 
-            all_upcoming_dont_reschedule = [ tweet for tweet in all_upcoming if tweet["dont_reschedule"] == True]
-            all_upcoming_can_reschedule = [ tweet for tweet in all_upcoming if tweet["dont_reschedule"] == False]
-
-            if shuffle:
-                random.shuffle(all_upcoming_can_reschedule)
+            all_upcoming_can_reschedule = list(tweet_db.find({"bot_name": self.name, "status": "unposted", "dont_reschedule": False}))
+            # Shuffle the rescheduleable ones if wanted
+            if shuffle: random.shuffle(all_upcoming_can_reschedule)
 
             # Let's set the dates!
             # Stat with initial date
             current_post_time = initial_post_time
             for tweet in all_upcoming_can_reschedule:
-                tweet["post_at"] = current_post_time.isoformat(timespec='seconds')
+                print(f"tweet with text \"{tweet['text']}\" should be posted at {current_post_time}")
+                tweet_db.update_one({"_id": ObjectId(tweet["_id"])}, {"$set": {"post_at": current_post_time}})
                 current_post_time += timedelta(minutes=interval)
 
-            # Merge the two lists back together and sort
-            all_upcoming_new = sorted(all_upcoming_dont_reschedule + all_upcoming_can_reschedule, key=self.sort_by_date)
-
-            # Write these items to upcoming
-            self.write_unposted_items(all_upcoming_new)
         except Exception as e:
+            print('FAILED TO REDISTRIBUTE')
             logging.exception(f"{self.name} - Error when redistributing tweets")
             return { "response": "failure", "message": f"{e}"}
 

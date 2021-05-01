@@ -109,14 +109,13 @@
         <div class="tab-pane fade" id="batchAdvanced" role="tabpanel" aria-labelledby="advanced-tab">
             <div class="w-100">
                 <br>
-                Paste a JSON array of Tweets below. A single entry should contain the following attributes:
+                Paste a JSON array of Tweets below. A single entry may contain the following attributes:
                 <ul>
                     <li><code>text</code> (string) - the body text of the Tweet</li>
-                    <li><code>post_at</code> (ISO 8601 formatted string) - the time to post the Tweet at</li>
-                    <li><code>dont_reschedule</code> (boolean) - whether or not this specific Tweet should be rescheduled when this bot's Tweets are rescheduled</li>
-                    <li><code>media</code> (array of up to 4 strings) - paths to the media to post</li>
-                    <li><code>reply_to</code> (string) - a Tweetinator ID for a Tweet to reply to</li>
-                    <li><code>id</code> (string) - unique identifier for this Tweet</li>
+                    <li><code>post_at</code> (ISO 8601 formatted string) - the time to post the Tweet at, <strong>in UTC time, NOT local time</strong>.</li>
+                    <li><code>dont_reschedule</code> (boolean) (optional) - whether or not this specific Tweet should be rescheduled when this bot's Tweets are rescheduled</li>
+                    <li><code>media</code> (array of up to 4 strings) (optional) - paths to the media to post</li>
+                    <li><code>reply_to</code> (string) (optional) - a Tweetinator ID for a Tweet to reply to</li>
                 </ul>
                 <code><textarea class="form-control" id="advancedBatchTweetText" rows="10"></textarea></code>
 
