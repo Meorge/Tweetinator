@@ -1,4 +1,4 @@
-from os import access
+from os import access, environ
 import re
 from time import sleep
 import signal
@@ -18,9 +18,12 @@ from bson.objectid import ObjectId
 import logging
 
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Log into database
-database_client = MongoClient()
+database_client = MongoClient(environ["MONGO_URI"])
 tweet_db = database_client.tweetinator.tweets
 
 
